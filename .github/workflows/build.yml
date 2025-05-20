@@ -1,0 +1,106 @@
+name: Build Applications
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  # Allow manual triggering
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v2
+    
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.9'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+    
+    - name: Build with PyInstaller
+      run: |
+        pyinstaller --name="Telemetry Summation Tool" --windowed --onedir --add-data="requirements.txt;." sum_telemetry_generic.py
+    
+    - name: Create ZIP archive
+      run: |
+        Compress-Archive -Path "dist\Telemetry Summation Tool" -DestinationPath "dist\Telemetry_Summation_Tool_Windows.zip"
+    
+    - name: Upload Windows artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: telemetry-summation-windows
+        path: dist\Telemetry_Summation_Tool_Windows.zip
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v2
+    
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.9'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+    
+    - name: Build with PyInstaller
+      run: |
+        pyinstaller --name="Telemetry Summation Tool" --windowed --onedir --add-data="requirements.txt:." sum_telemetry_generic.py
+    
+    - name: Create ZIP archive
+      run: |
+        cd dist && zip -r "Telemetry_Summation_Tool_macOS.zip" "Telemetry Summation Tool.app"
+    
+    - name: Upload macOS artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: telemetry-summation-macos
+        path: dist/Telemetry_Summation_Tool_macOS.zip
+
+  create-release:
+    needs: [build-windows, build-macos]
+    runs-on: ubuntu-latest
+    # Only create releases when pushing to the main branch, not on PRs
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v2
+        with:
+          name: telemetry-summation-windows
+          path: windows
+          
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v2
+        with:
+          name: telemetry-summation-macos
+          path: macos
+      
+      - name: Get current date
+        id: date
+        run: echo "::set-output name=date::$(date +'%Y.%m.%d')"
+      
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ steps.date.outputs.date }}
+          name: Release ${{ steps.date.outputs.date }}
+          draft: false
+          prerelease: false
+          files: |
+            windows/Telemetry_Summation_Tool_Windows.zip
+            macos/Telemetry_Summation_Tool_macOS.zip
