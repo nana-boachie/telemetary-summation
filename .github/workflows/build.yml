@@ -12,10 +12,10 @@ jobs:
   build-windows:
     runs-on: windows-latest
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
     
     - name: Set up Python
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v5
       with:
         python-version: '3.9'
     
@@ -34,18 +34,19 @@ jobs:
         Compress-Archive -Path "dist\Telemetry Summation Tool" -DestinationPath "dist\Telemetry_Summation_Tool_Windows.zip"
     
     - name: Upload Windows artifact
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       with:
         name: telemetry-summation-windows
         path: dist\Telemetry_Summation_Tool_Windows.zip
+        retention-days: 7
 
   build-macos:
     runs-on: macos-latest
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
     
     - name: Set up Python
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v5
       with:
         python-version: '3.9'
     
@@ -64,38 +65,39 @@ jobs:
         cd dist && zip -r "Telemetry_Summation_Tool_macOS.zip" "Telemetry Summation Tool.app"
     
     - name: Upload macOS artifact
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       with:
         name: telemetry-summation-macos
         path: dist/Telemetry_Summation_Tool_macOS.zip
+        retention-days: 7
 
   create-release:
     needs: [build-windows, build-macos]
     runs-on: ubuntu-latest
     # Only create releases when pushing to the main branch, not on PRs
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
     steps:
       - name: Download Windows artifact
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v4
         with:
           name: telemetry-summation-windows
           path: windows
           
       - name: Download macOS artifact
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v4
         with:
           name: telemetry-summation-macos
           path: macos
       
       - name: Get current date
         id: date
-        run: echo "::set-output name=date::$(date +'%Y.%m.%d')"
+        run: echo "date=$(date +'%Y.%m.%d')" >> $GITHUB_OUTPUT
       
       - name: Create Release
         id: create_release
         uses: softprops/action-gh-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: v${{ steps.date.outputs.date }}
           name: Release ${{ steps.date.outputs.date }}
