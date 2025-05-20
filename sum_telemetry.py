@@ -6,6 +6,56 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 from collections import defaultdict
 
+def analyze_excel_file(file_path, prefix_length=6):
+    """Analyze the Excel file and return information about sheet grouping without processing"""
+    # Load the Excel file
+    xl = pd.ExcelFile(file_path)
+    
+    # Group sheet names by first N characters (default=6)
+    sheet_groups = defaultdict(list)
+    for sheet_name in xl.sheet_names:
+        if len(sheet_name) >= prefix_length:
+            prefix = sheet_name[:prefix_length]
+            sheet_groups[prefix].append(sheet_name)
+        else:
+            # For sheet names shorter than prefix_length, use the entire name
+            sheet_groups[sheet_name].append(sheet_name)
+    
+    # Analyze each sheet for Raw column and timestamp
+    sheet_analysis = {}
+    for sheet_name in xl.sheet_names:
+        try:
+            df = pd.read_excel(file_path, sheet_name=sheet_name, nrows=5)  # Read just a few rows for analysis
+            has_raw = 'Raw' in df.columns
+            
+            # Check for timestamp column
+            timestamp_col = None
+            for col in df.columns:
+                if 'time' in col.lower() or 'date' in col.lower():
+                    timestamp_col = col
+                    break
+            
+            sheet_analysis[sheet_name] = {
+                'has_raw': has_raw,
+                'timestamp_col': timestamp_col,
+                'processable': has_raw and timestamp_col is not None
+            }
+        except Exception as e:
+            sheet_analysis[sheet_name] = {
+                'has_raw': False,
+                'timestamp_col': None,
+                'processable': False,
+                'error': str(e)
+            }
+    
+    return {
+        'sheet_groups': sheet_groups,
+        'sheet_analysis': sheet_analysis,
+        'total_sheets': len(xl.sheet_names),
+        'processable_groups': sum(1 for prefix, sheets in sheet_groups.items() 
+                                if any(sheet_analysis.get(sheet, {}).get('processable', False) for sheet in sheets))
+    }
+
 def process_excel_file(file_path, output_path, prefix_length=6):
     # Load the Excel file
     xl = pd.ExcelFile(file_path)
@@ -182,12 +232,25 @@ def create_ui():
              fg="#555555",
              anchor="w").pack(fill="x")
     
-    # Create process button
-    process_frame = tk.Frame(root, pady=20)
-    process_frame.pack()
+    # Create button frame
+    button_frame = tk.Frame(root, pady=20)
+    button_frame.pack()
     
+    # Preview button
     tk.Button(
-        process_frame, 
+        button_frame, 
+        text="Preview", 
+        command=preview_file,
+        bg="#2196F3",
+        fg="white",
+        font=("Arial", 12, "bold"),
+        padx=20,
+        pady=10
+    ).pack(side=tk.LEFT, padx=10)
+    
+    # Process button
+    tk.Button(
+        button_frame, 
         text="Process Files", 
         command=process_files,
         bg="#4CAF50",
@@ -195,7 +258,7 @@ def create_ui():
         font=("Arial", 12, "bold"),
         padx=20,
         pady=10
-    ).pack()
+    ).pack(side=tk.RIGHT, padx=10)
     
     # Status label
     status_var = tk.StringVar(value="Ready. Please select files.")
@@ -207,6 +270,92 @@ def create_ui():
         status_var.set(message)
         status_label.config(fg="red" if is_error else "black")
         print(message)
+        
+    # Function to preview the file
+    def preview_file():
+        input_file = input_file_var.get()
+        
+        if not input_file:
+            update_status("No input file selected", True)
+            messagebox.showerror("Error", "Please select an input file first")
+            return
+            
+        if not input_file.lower().endswith(('.xls', '.xlsx')):
+            update_status(f"Not a valid Excel file: {input_file}", True)
+            messagebox.showerror("Error", f"Not a valid Excel file: {input_file}")
+            return
+        
+        update_status(f"Analyzing file: {os.path.basename(input_file)}...")
+        
+        try:
+            # Get the selected prefix length
+            prefix_length = prefix_length_var.get()
+            analysis = analyze_excel_file(input_file, prefix_length)
+            
+            # Create a preview window
+            preview_window = tk.Toplevel(root)
+            preview_window.title(f"Preview: {os.path.basename(input_file)}")
+            preview_window.geometry("700x500")
+            preview_window.grab_set()  # Modal window
+            
+            # Add scrollable text widget
+            frame = tk.Frame(preview_window)
+            frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+            
+            scrollbar = tk.Scrollbar(frame)
+            scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+            
+            text_widget = tk.Text(frame, wrap=tk.WORD, yscrollcommand=scrollbar.set)
+            text_widget.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+            
+            scrollbar.config(command=text_widget.yview)
+            
+            # Insert analysis results
+            text_widget.insert(tk.END, f"File: {input_file}\n")
+            text_widget.insert(tk.END, f"Total sheets: {analysis['total_sheets']}\n")
+            text_widget.insert(tk.END, f"Processable groups: {analysis['processable_groups']}\n\n")
+            text_widget.insert(tk.END, "Sheet grouping (prefix length: {}):\n".format(prefix_length))
+            
+            for prefix, sheets in analysis['sheet_groups'].items():
+                text_widget.insert(tk.END, f"\nGroup: '{prefix}'\n")
+                text_widget.insert(tk.END, f"Sheets in this group: {len(sheets)}\n")
+                
+                for sheet in sheets:
+                    sheet_info = analysis['sheet_analysis'][sheet]
+                    processable = sheet_info['processable']
+                    status = "Will be processed" if processable else "Will be SKIPPED"
+                    text_widget.insert(tk.END, f"  - {sheet}: {status}\n")
+                    
+                    if not processable:
+                        if not sheet_info['has_raw']:
+                            text_widget.insert(tk.END, f"    Missing 'Raw' column\n")
+                        if not sheet_info['timestamp_col']:
+                            text_widget.insert(tk.END, f"    Missing timestamp column\n")
+                        if 'error' in sheet_info:
+                            text_widget.insert(tk.END, f"    Error: {sheet_info['error']}\n")
+                    else:
+                        text_widget.insert(tk.END, f"    Timestamp column: {sheet_info['timestamp_col']}\n")
+            
+            # Make text widget read-only
+            text_widget.config(state=tk.DISABLED)
+            
+            # Add close button
+            tk.Button(
+                preview_window, 
+                text="Close", 
+                command=preview_window.destroy,
+                bg="#f44336",
+                fg="white",
+                padx=10,
+                pady=5
+            ).pack(pady=10)
+            
+            update_status(f"Preview generated for {os.path.basename(input_file)}")
+            
+        except Exception as e:
+            error_msg = str(e)
+            update_status(f"Error during preview: {error_msg}", True)
+            messagebox.showerror("Error", f"An error occurred during preview: {error_msg}")
     
     # Override the browse function to update status
     original_browse_input = browse_input_file
