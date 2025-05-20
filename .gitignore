@@ -1,0 +1,36 @@
+# Python virtual environment
+venv/
+env/
+ENV/
+
+# Build and distribution files
+build/
+dist/
+*.egg-info/
+*.egg
+*.spec
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# macOS system files
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Excel files (optional, uncomment if you don't want to track data files)
+# *.xls
+# *.xlsx
+
+# Output files
+*_summed.xlsx
