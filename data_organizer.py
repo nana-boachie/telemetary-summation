@@ -4,6 +4,14 @@ import pandas as pd
 from datetime import datetime
 import calendar
 import glob
+import re
+
+# Import this at the module level to avoid potential issues when called from methods
+try:
+    from sum_telemetry import process_excel_file
+except ImportError:
+    # Provide fallback or warning
+    process_excel_file = None
 
 class TelemetryDataOrganizer:
     """
@@ -52,7 +60,7 @@ class TelemetryDataOrganizer:
         
         return month_dirs
     
-    def store_monthly_file(self, file_path, year=None, month=None, copy_file=True):
+    def store_monthly_file(self, file_path, year=None, month=None, copy_file=True, overwrite=False):
         """
         Store a monthly data file in the appropriate year/month directory.
         If year/month not provided, tries to determine from filename or file content.
@@ -62,6 +70,7 @@ class TelemetryDataOrganizer:
             year (str or int, optional): Year to store the file under
             month (str or int, optional): Month to store the file under
             copy_file (bool): If True, copy the file; if False, move it
+            overwrite (bool): If True, overwrite existing files; if False, create a new file with timestamp
         
         Returns:
             str: Path to the stored file
@@ -92,11 +101,25 @@ class TelemetryDataOrganizer:
         # Destination path
         destination = os.path.join(target_dir, file_name)
         
+        # Handle existing files
+        if os.path.exists(destination) and not overwrite:
+            file_base, file_ext = os.path.splitext(file_name)
+            timestamp = int(datetime.now().timestamp())
+            # Create a unique filename with timestamp
+            destination = os.path.join(target_dir, f"{file_base}_{timestamp}{file_ext}")
+        
+        # Check if target directory is writable
+        if not os.access(target_dir, os.W_OK):
+            raise PermissionError(f"Target directory {target_dir} is not writable")
+        
         # Copy or move the file
-        if copy_file:
-            shutil.copy2(file_path, destination)
-        else:
-            shutil.move(file_path, destination)
+        try:
+            if copy_file:
+                shutil.copy2(file_path, destination)
+            else:
+                shutil.move(file_path, destination)
+        except Exception as e:
+            raise IOError(f"Failed to copy/move file to {destination}: {str(e)}")
         
         return destination
     
@@ -127,13 +150,23 @@ class TelemetryDataOrganizer:
             match = re.search(pattern, file_name)
             if match:
                 groups = match.groups()
-                if len(groups[0]) == 4:  # YYYY_MM format
-                    result['year'] = groups[0]
-                    result['month'] = int(groups[1])
-                else:  # MM_YYYY format
-                    result['year'] = groups[1]
-                    result['month'] = int(groups[0])
-                break
+                try:
+                    if len(groups[0]) == 4:  # YYYY_MM format
+                        result['year'] = groups[0]
+                        result['month'] = int(groups[1])
+                    else:  # MM_YYYY format
+                        result['year'] = groups[1]
+                        result['month'] = int(groups[0])
+                    # Validate month is between 1-12
+                    if result['month'] < 1 or result['month'] > 12:
+                        # Reset and continue to next pattern
+                        result['year'] = None
+                        result['month'] = None
+                        continue
+                    break
+                except ValueError:
+                    # If conversion to int fails, continue to next pattern
+                    continue
         
         # If we couldn't determine from filename, try to read the file if it's Excel
         if (result['year'] is None or result['month'] is None) and file_path.endswith(('.xlsx', '.xls')):
@@ -175,7 +208,13 @@ class TelemetryDataOrganizer:
         Returns:
             list: List of file paths for the specified month
         """
-        month = int(month)
+        try:
+            month = int(month)
+            if month < 1 or month > 12:
+                raise ValueError(f"Month must be between 1 and 12, got {month}")
+        except ValueError as e:
+            raise ValueError(f"Invalid month value: {month}. {str(e)}")
+            
         year_dir = os.path.join(self.base_directory, str(year))
         month_name = calendar.month_name[month]
         month_dir = os.path.join(year_dir, f"{month:02d}_{month_name}")
@@ -240,17 +279,30 @@ class TelemetryDataOrganizer:
             from sum_telemetry import process_excel_file
             
             def default_process(file_path):
+                if process_excel_file is None:
+                    raise ImportError("Cannot process files: sum_telemetry module not available")
+                
                 # Create a temporary output path
                 temp_output = os.path.join(os.path.dirname(file_path), f"temp_{os.path.basename(file_path)}")
-                # Process the file
-                results = process_excel_file(file_path, temp_output)
-                # Load the processed data
-                if os.path.exists(temp_output):
-                    result_data = pd.read_excel(temp_output)
-                    # Clean up
-                    os.remove(temp_output)
-                    return result_data
-                return None
+                
+                try:
+                    # Process the file
+                    results = process_excel_file(file_path, temp_output)
+                    
+                    # Load the processed data if file exists
+                    if os.path.exists(temp_output):
+                        result_data = pd.read_excel(temp_output)
+                        return result_data
+                    return None
+                except Exception as e:
+                    raise Exception(f"Error processing file {file_path}: {str(e)}")
+                finally:
+                    # Clean up temporary file regardless of success or failure
+                    if os.path.exists(temp_output):
+                        try:
+                            os.remove(temp_output)
+                        except Exception as cleanup_error:
+                            print(f"Warning: Could not remove temporary file {temp_output}: {cleanup_error}")
             
             process_func = default_process
         
@@ -284,7 +336,21 @@ class TelemetryDataOrganizer:
             # Save to the output file if a path is provided
             if output_path:
                 # Create directory if it doesn't exist
-                os.makedirs(os.path.dirname(output_path), exist_ok=True)
+                output_dir = os.path.dirname(output_path)
+                os.makedirs(output_dir, exist_ok=True)
+                
+                # Check if the directory is writable
+                if not os.access(output_dir, os.W_OK):
+                    raise PermissionError(f"Output directory {output_dir} is not writable")
+                
+                # If file already exists, create a backup
+                if os.path.exists(output_path):
+                    backup_path = f"{output_path}.bak"
+                    try:
+                        shutil.copy2(output_path, backup_path)
+                        print(f"Created backup of existing report: {backup_path}")
+                    except Exception as e:
+                        print(f"Warning: Could not create backup of existing report: {str(e)}")
                 
                 # Save to Excel
                 with pd.ExcelWriter(output_path) as writer:
