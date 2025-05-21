@@ -76,26 +76,38 @@ jobs:
       run: |
         pyinstaller --name="Annual Report Generator" --windowed --onedir --add-data="requirements.txt:." --add-data="data_organizer.py:." annual_report_generator.py
     
-    - name: Create ZIP archives
+    - name: Create and upload macOS artifacts
       run: |
+        # Ensure we're in the root directory
+        cd "$GITHUB_WORKSPACE"
+        
+        # Create dist directory if it doesn't exist
         mkdir -p dist
+        
+        # Create ZIP files with full paths
         cd dist
-        zip -r "Telemetry_Summation_Tool_macOS.zip" "Telemetry Summation Tool.app"
-        zip -r "Annual_Report_Generator_macOS.zip" "Annual Report Generator.app"
-        cd ..
-    
+        zip -r "$GITHUB_WORKSPACE/Telemetry_Summation_Tool_macOS.zip" "Telemetry Summation Tool.app"
+        zip -r "$GITHUB_WORKSPACE/Annual_Report_Generator_macOS.zip" "Annual Report Generator.app"
+        cd "$GITHUB_WORKSPACE"
+        
+        # List files for debugging
+        echo "Files in workspace:"
+        ls -la
+        echo "Files in dist directory:"
+        ls -la dist/
+        
     - name: Upload macOS Telemetry Tool artifact
       uses: actions/upload-artifact@v4
       with:
         name: telemetry-summation-macos
-        path: dist/Telemetry_Summation_Tool_macOS.zip
+        path: Telemetry_Summation_Tool_macOS.zip
         retention-days: 7
         
     - name: Upload macOS Annual Report Generator artifact
       uses: actions/upload-artifact@v4
       with:
         name: annual-report-generator-macos
-        path: dist/Annual_Report_Generator_macOS.zip
+        path: Annual_Report_Generator_macOS.zip
         retention-days: 7
 
   create-release:
