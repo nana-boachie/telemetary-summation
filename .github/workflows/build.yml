@@ -25,19 +25,31 @@ jobs:
         pip install -r requirements.txt
         pip install pyinstaller
     
-    - name: Build with PyInstaller
+    - name: Build Telemetry Tool with PyInstaller
       run: |
         pyinstaller --name="Telemetry Summation Tool" --windowed --onedir --add-data="requirements.txt;." sum_telemetry_generic.py
     
-    - name: Create ZIP archive
+    - name: Build Annual Report Generator with PyInstaller
+      run: |
+        pyinstaller --name="Annual Report Generator" --windowed --onedir --add-data="requirements.txt;." --add-data="data_organizer.py;." annual_report_generator.py
+    
+    - name: Create ZIP archives
       run: |
         Compress-Archive -Path "dist\Telemetry Summation Tool" -DestinationPath "dist\Telemetry_Summation_Tool_Windows.zip"
+        Compress-Archive -Path "dist\Annual Report Generator" -DestinationPath "dist\Annual_Report_Generator_Windows.zip"
     
-    - name: Upload Windows artifact
+    - name: Upload Windows Telemetry Tool artifact
       uses: actions/upload-artifact@v4
       with:
         name: telemetry-summation-windows
         path: dist\Telemetry_Summation_Tool_Windows.zip
+        retention-days: 7
+        
+    - name: Upload Windows Annual Report Generator artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: annual-report-generator-windows
+        path: dist\Annual_Report_Generator_Windows.zip
         retention-days: 7
 
   build-macos:
@@ -56,19 +68,31 @@ jobs:
         pip install -r requirements.txt
         pip install pyinstaller
     
-    - name: Build with PyInstaller
+    - name: Build Telemetry Tool with PyInstaller
       run: |
         pyinstaller --name="Telemetry Summation Tool" --windowed --onedir --add-data="requirements.txt:." sum_telemetry_generic.py
     
-    - name: Create ZIP archive
+    - name: Build Annual Report Generator with PyInstaller
+      run: |
+        pyinstaller --name="Annual Report Generator" --windowed --onedir --add-data="requirements.txt:." --add-data="data_organizer.py:." annual_report_generator.py
+    
+    - name: Create ZIP archives
       run: |
         cd dist && zip -r "Telemetry_Summation_Tool_macOS.zip" "Telemetry Summation Tool.app"
+        cd dist && zip -r "Annual_Report_Generator_macOS.zip" "Annual Report Generator.app"
     
-    - name: Upload macOS artifact
+    - name: Upload macOS Telemetry Tool artifact
       uses: actions/upload-artifact@v4
       with:
         name: telemetry-summation-macos
         path: dist/Telemetry_Summation_Tool_macOS.zip
+        retention-days: 7
+        
+    - name: Upload macOS Annual Report Generator artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: annual-report-generator-macos
+        path: dist/Annual_Report_Generator_macOS.zip
         retention-days: 7
 
   create-release:
@@ -79,17 +103,29 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Download Windows artifact
+      - name: Download Windows Telemetry Tool artifact
         uses: actions/download-artifact@v4
         with:
           name: telemetry-summation-windows
-          path: windows
+          path: windows/telemetry-tool
           
-      - name: Download macOS artifact
+      - name: Download Windows Annual Report Generator artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: annual-report-generator-windows
+          path: windows/annual-report
+          
+      - name: Download macOS Telemetry Tool artifact
         uses: actions/download-artifact@v4
         with:
           name: telemetry-summation-macos
-          path: macos
+          path: macos/telemetry-tool
+          
+      - name: Download macOS Annual Report Generator artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: annual-report-generator-macos
+          path: macos/annual-report
       
       - name: Get current date
         id: date
@@ -104,5 +140,7 @@ jobs:
           draft: false
           prerelease: false
           files: |
-            windows/Telemetry_Summation_Tool_Windows.zip
-            macos/Telemetry_Summation_Tool_macOS.zip
+            windows/telemetry-tool/Telemetry_Summation_Tool_Windows.zip
+            windows/annual-report/Annual_Report_Generator_Windows.zip
+            macos/telemetry-tool/Telemetry_Summation_Tool_macOS.zip
+            macos/annual-report/Annual_Report_Generator_macOS.zip
