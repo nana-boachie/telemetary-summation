@@ -82,6 +82,7 @@ jobs:
         cd dist
         zip -r "Telemetry_Summation_Tool_macOS.zip" "Telemetry Summation Tool.app"
         zip -r "Annual_Report_Generator_macOS.zip" "Annual Report Generator.app"
+        cd ..
     
     - name: Upload macOS Telemetry Tool artifact
       uses: actions/upload-artifact@v4
