@@ -14,14 +14,22 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
-    - name: Rename old Python files to .old
+    # We're now keeping all needed Python files and not renaming them to .old
+    - name: Clean up unneeded Python files
       run: |
-        Get-ChildItem -Path . -Filter *.py -Exclude telemetry_analysis_suite.py | 
-        Where-Object { $_.Name -ne "telemetry_analysis_suite.py" } | 
+        # Remove backup files if they exist
+        Get-ChildItem -Path . -Filter *.py.bak -ErrorAction SilentlyContinue | 
         ForEach-Object { 
-            $newName = $_.FullName + ".old"
-            if (Test-Path $newName) { Remove-Item $newName -Force }
-            Rename-Item -Path $_.FullName -NewName $newName 
+            Remove-Item -Path $_.FullName -Force 
+        }
+        
+        # Create directory for non-essential files
+        New-Item -ItemType Directory -Path "./old_files" -Force
+        
+        # Move any other unnecessary Python files to old_files (only if they exist and aren't needed)
+        Get-ChildItem -Path . -Filter *.py -Exclude telemetry_analysis_suite.py,sum_telemetry.py,sum_telemetry_generic.py,data_organizer.py | 
+        ForEach-Object { 
+            Move-Item -Path $_.FullName -Destination "./old_files/" -Force
         }
     
     - name: Set up Python
@@ -37,7 +45,7 @@ jobs:
     
     - name: Build Telemetry Analysis Suite with PyInstaller
       run: |
-        pyinstaller --name="Telemetry Analysis Suite" --windowed --onedir --add-data="requirements.txt;." --add-data="data_organizer.py;." --add-data="assets;assets" telemetry_analysis_suite.py
+        pyinstaller --name="Telemetry Analysis Suite" --windowed --onedir --add-data="requirements.txt;." --add-data="data_organizer.py;." --add-data="sum_telemetry.py;." --add-data="sum_telemetry_generic.py;." --add-data="assets;assets" telemetry_analysis_suite.py
     
     - name: Create ZIP archive
       run: |
@@ -69,7 +77,7 @@ jobs:
     
     - name: Build Telemetry Analysis Suite with PyInstaller (macOS)
       run: |
-        pyinstaller --name="Telemetry Analysis Suite" --windowed --noconfirm --onefile --add-data="requirements.txt:." --add-data="data_organizer.py:." --add-data="assets:assets" telemetry_analysis_suite.py
+        pyinstaller --name="Telemetry Analysis Suite" --windowed --noconfirm --onefile --add-data="requirements.txt:." --add-data="data_organizer.py:." --add-data="sum_telemetry.py:." --add-data="sum_telemetry_generic.py:." --add-data="assets:assets" telemetry_analysis_suite.py
     
     - name: Create ZIP archive (macOS)
       run: |
