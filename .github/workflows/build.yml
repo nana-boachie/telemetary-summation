@@ -74,10 +74,10 @@ jobs:
     - name: Create ZIP archive (macOS)
       run: |
         mkdir -p dist/macos
-        cd dist
+        cd "dist"
         zip -r "Telemetry_Analysis_Suite_macOS.zip" "Telemetry Analysis Suite.app"
-        mkdir -p dist/macos
-        mv "Telemetry_Analysis_Suite_macOS.zip" "dist/macos/"
+        mv "Telemetry_Analysis_Suite_macOS.zip" "../dist/macos/"
+        cd ..
     
     - name: Upload macOS Artifact
       uses: actions/upload-artifact@v4

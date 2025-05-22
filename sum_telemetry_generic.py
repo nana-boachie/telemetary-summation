@@ -217,55 +217,36 @@ class GenericTelemetrySumTool(QMainWindow):
             QMessageBox.critical(self, "Error", "Please select an input file first")
             return
         
-        if not input_file.lower().endswith(('.xls', '.xlsx')):
-            self.update_status(f"Not a valid Excel file: {input_file}", True)
-            QMessageBox.critical(self, "Error", f"Not a valid Excel file: {input_file}")
-            return
-        
-        self.update_status(f"Analyzing columns in: {os.path.basename(input_file)}...")
-        
         try:
-            # Load the Excel file
-            xl = pd.ExcelFile(input_file)
+            # Try with openpyxl first (for .xlsx)
+            df = pd.read_excel(input_file, sheet_name=0, nrows=5, engine='openpyxl')
+            self.available_columns = df.columns.tolist()
+            self.available_list.clear()
+            self.selected_list.clear()
+            self.timestamp_combo.clear()
             
-            # Get first sheet to analyze columns
-            if len(xl.sheet_names) > 0:
-                first_sheet = xl.sheet_names[0]
-                df = pd.read_excel(input_file, sheet_name=first_sheet, nrows=5)
-                
-                # Store available columns
-                self.available_columns = list(df.columns)
-                
-                # Update UI
-                self.available_list.clear()
-                self.selected_list.clear()
-                self.timestamp_combo.clear()
-                
-                # Add to available columns list
-                for col in self.available_columns:
-                    self.available_list.addItem(str(col))
-                
-                # Add to timestamp dropdown (add a "None" option first)
-                self.timestamp_combo.addItem("-- Select Timestamp Column --")
-                for col in self.available_columns:
-                    self.timestamp_combo.addItem(str(col))
-                
-                # Try to auto-select timestamp column
-                for i, col in enumerate(self.available_columns):
-                    col_str = str(col).lower()
-                    if 'time' in col_str or 'date' in col_str:
-                        self.timestamp_combo.setCurrentIndex(i + 1)  # +1 because of the "None" option
-                        break
-                
-                # Enable preview and process buttons
-                self.preview_button.setEnabled(True)
-                self.process_button.setEnabled(True)
-                
-                self.update_status(f"Found {len(self.available_columns)} columns in {os.path.basename(input_file)}")
-                
+            # Add to available columns list and timestamp dropdown
+            self.timestamp_combo.addItem("-- Select Timestamp Column --")
+            for col in self.available_columns:
+                self.available_list.addItem(str(col))
+                self.timestamp_combo.addItem(str(col))
+            
+            # Try to auto-select timestamp column
+            for i, col in enumerate(self.available_columns):
+                col_str = str(col).lower()
+                if 'time' in col_str or 'date' in col_str:
+                    self.timestamp_combo.setCurrentIndex(i + 1)  # +1 because of the "None" option
+                    break
+            
+            # Enable preview and process buttons
+            self.preview_button.setEnabled(True)
+            self.process_button.setEnabled(True)
+            
+            if not self.available_columns:
+                self.update_status("No columns found in the Excel file", True)
+                QMessageBox.critical(self, "Error", "No columns found in the Excel file")
             else:
-                self.update_status("No sheets found in the Excel file", True)
-                QMessageBox.critical(self, "Error", "No sheets found in the Excel file")
+                self.update_status(f"Found {len(self.available_columns)} columns in {os.path.basename(input_file)}")
                 
         except Exception as e:
             error_msg = str(e)
