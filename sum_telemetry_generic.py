@@ -217,18 +217,65 @@ class GenericTelemetrySumTool(QMainWindow):
             QMessageBox.critical(self, "Error", "Please select an input file first")
             return
         
+        if not os.path.exists(input_file):
+            self.update_status(f"File not found: {input_file}", True)
+            QMessageBox.critical(self, "Error", f"File not found: {input_file}")
+            return
+        
+        self.update_status(f"Analyzing file: {os.path.basename(input_file)}...")
+        
         try:
-            # Try with openpyxl first (for .xlsx)
-            df = pd.read_excel(input_file, sheet_name=0, nrows=5, engine='openpyxl')
+            # First, try to determine the file type and use the appropriate engine
+            file_ext = os.path.splitext(input_file)[1].lower()
+            df = None
+            
+            # Try different engines based on file extension
+            if file_ext == '.xlsx':
+                try:
+                    df = pd.read_excel(input_file, nrows=5, engine='openpyxl')
+                except Exception as e:
+                    try:
+                        df = pd.read_excel(input_file, nrows=5, engine='xlrd')
+                    except:
+                        df = pd.read_excel(input_file, nrows=5)
+            elif file_ext == '.xls':
+                try:
+                    df = pd.read_excel(input_file, nrows=5, engine='xlrd')
+                except Exception as e:
+                    try:
+                        df = pd.read_excel(input_file, nrows=5, engine='openpyxl')
+                    except:
+                        df = pd.read_excel(input_file, nrows=5)
+            else:
+                # For other extensions or no extension, try all engines
+                try:
+                    df = pd.read_excel(input_file, nrows=5, engine='openpyxl')
+                except Exception as e1:
+                    try:
+                        df = pd.read_excel(input_file, nrows=5, engine='xlrd')
+                    except Exception as e2:
+                        try:
+                            df = pd.read_excel(input_file, nrows=5)
+                        except Exception as e3:
+                            raise Exception(f"Could not read file. Tried openpyxl, xlrd, and default engines. Last error: {str(e3)}")
+            
+            if df is None or df.empty:
+                raise Exception("The Excel file is empty or could not be read")
+            
+            # Clear previous data
             self.available_columns = df.columns.tolist()
             self.available_list.clear()
             self.selected_list.clear()
             self.timestamp_combo.clear()
+            self.selected_value_columns = []
             
-            # Add to available columns list and timestamp dropdown
-            self.timestamp_combo.addItem("-- Select Timestamp Column --")
+            # Add to available columns list
             for col in self.available_columns:
                 self.available_list.addItem(str(col))
+            
+            # Add to timestamp dropdown (add a "None" option first)
+            self.timestamp_combo.addItem("-- Select Timestamp Column --")
+            for col in self.available_columns:
                 self.timestamp_combo.addItem(str(col))
             
             # Try to auto-select timestamp column
@@ -251,7 +298,11 @@ class GenericTelemetrySumTool(QMainWindow):
         except Exception as e:
             error_msg = str(e)
             self.update_status(f"Error analyzing columns: {error_msg}", True)
-            QMessageBox.critical(self, "Error", f"An error occurred while analyzing columns: {error_msg}")
+            QMessageBox.critical(
+                self, 
+                "Error", 
+                f"Could not read the Excel file. Please ensure it's a valid Excel file.\n\nError details: {error_msg}"
+            )
     
     def add_selected_columns(self):
         """Add selected columns from available list to selected list"""
