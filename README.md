@@ -1,7 +1,7 @@
 # Telemetry Analysis Suite
 
 ## Overview
-A comprehensive cross-platform application for processing, analyzing, and organizing telemetry data from Excel files. The suite combines multiple tools into a single, user-friendly interface with the following capabilities:
+A simplified, comprehensive cross-platform application for processing, analyzing, and organizing telemetry data from Excel files. The suite combines multiple tools into a single, user-friendly interface with the following capabilities:
 
 ## Features
 
@@ -88,10 +88,10 @@ Create comprehensive reports from your organized telemetry data.
    python telemetry_analysis_suite.py
    ```
 
-2. **The main window will open with three tabs**:
+2. **The main window will open with the following tabs**:
+   - **Data Manager**: For organizing files and generating reports (main tab)
    - **Telemetry Sum**: For processing individual Excel files
    - **Generic Telemetry**: For advanced processing with custom column selection
-   - **Data Organizer**: For organizing and processing multiple files
 
 ## Detailed Usage
 
@@ -117,24 +117,26 @@ Create comprehensive reports from your organized telemetry data.
 9. Click "Preview" to verify the processing
 10. Click "Process Files" to generate the output
 
-### 3. Data Organizer
+### 3. Data Manager
 
-1. Click on the "Data Organizer" tab
-2. Set the "Data Storage Location" where organized files will be saved
-3. Click "Browse..." next to "Source Folder" to select files to organize
-4. (Optional) Specify the year and month for the files
-5. Click "Organize Files" to begin processing
-6. View the progress in the log area
-7. Organized files will be placed in `[Data Storage Location]/[Year]/[Month]/`
+1. The "Data Manager" tab provides two sub-tabs:
+   - **Organize Files**: For organizing telemetry data files
+   - **Generate Reports**: For creating annual reports
 
-### 4. Report Generation
+#### Organizing Files:
+1. Set the "Data Storage Location" where organized files will be saved
+2. Click "Browse..." next to "Source Folder" to select files to organize
+3. (Optional) Specify the year and month for the files
+4. Click "Organize Files" to begin processing
+5. View the progress in the log area
+6. Organized files will be placed in `[Data Storage Location]/[Year]/[Month]/`
 
-1. In the "Data Organizer" tab, switch to the "Generate Reports" sub-tab
-2. Select the year for the report
-3. Choose report options (summary, charts, etc.)
-4. Click "Generate Annual Report"
-5. Preview the report in the preview area
-6. Click "Save Report" to export the report to a file
+#### Report Generation:
+1. In the "Generate Reports" sub-tab, select the year for the report
+2. (Optional) Specify an output file location
+3. Click "Check Available Data" to see which months have data available
+4. Click "Generate Annual Report" to create the report
+5. When complete, you'll be prompted with the report location
 
 ## Command Line Usage
 
@@ -166,28 +168,23 @@ auto_detect_dates = true
 ```
 ```
 
-## Usage
+## Command Line Usage
 
-### Telemetry Summation Tool
+While the main application provides a complete GUI interface, you can also use individual components from the command line if needed:
+
 ```bash
-python sum_telemetry_generic.py
+# Process a single file with the Telemetry Summation Tool
+python sum_telemetry.py input_file.xlsx
+
+# Get help on command line options
+python sum_telemetry.py --help
 ```
 
-1. Launch the application
-2. Browse for your Excel file
-3. Click "Analyze" to extract available columns
-4. Select columns to process and a timestamp column (optional)
-5. Preview results or process the file
+However, using the main GUI application is recommended for most users:
 
-### Annual Report Generator
 ```bash
-python annual_report_generator.py
+python telemetry_analysis_suite.py
 ```
-
-1. Launch the application
-2. Select the source directory containing your monthly Excel files
-3. Choose a destination directory for the organized files and reports
-4. Click "Generate Report" to process the files
 
 ## Output
 
@@ -218,7 +215,10 @@ Pre-built executables are available in the GitHub releases section. To build fro
    pip install pyinstaller
    ```
 
-2. Build the applications:
+2. Build the application:
+   ```bash
+   pyinstaller --name="Telemetry Analysis Suite" --windowed --onedir --add-data="requirements.txt;." --add-data="data_organizer.py;." --add-data="assets;assets" telemetry_analysis_suite.py
+   ```
 
 ## License
 

@@ -13,32 +13,34 @@ import calendar
 # Import core functionality
 from data_organizer import TelemetryDataOrganizer
 
-# Import sum_telemetry and prevent it from running __main__
-import sys
+# Import telemetry modules
 import importlib.util
 
 def load_module(module_name):
-    """Helper function to load a module, trying both .py and .py.old extensions"""
-    base_path = module_name
+    """Helper function to load a module using absolute paths"""
+    # Get the directory of the current script
+    current_dir = os.path.dirname(os.path.abspath(__file__))
     
-    # Try .py first, then .py.old
-    for ext in ['', '.old']:
-        try:
-            file_path = f"{base_path}.py{ext}" if ext else f"{base_path}.py"
-            spec = importlib.util.spec_from_file_location(module_name, file_path)
-            if spec is None:
-                continue
+    # Try with absolute paths
+    try:
+        file_path = os.path.join(current_dir, f"{module_name}.py")
+        
+        if not os.path.exists(file_path):
+            raise ImportError(f"File not found: {file_path}")
                 
-            module = importlib.util.module_from_spec(spec)
-            sys.modules[module_name] = module
-            spec.loader.exec_module(module)
-            return module
-        except FileNotFoundError:
-            continue
+        spec = importlib.util.spec_from_file_location(module_name, file_path)
+        if spec is None:
+            raise ImportError(f"Failed to create spec for {file_path}")
+                
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[module_name] = module
+        spec.loader.exec_module(module)
+        return module
+    except Exception as e:
+        print(f"Error loading module {module_name}: {e}")
+        raise
     
-    raise ImportError(f"Could not find {module_name}.py or {module_name}.py.old")
-
-# Load sum_telemetry without executing its __main__ section
+# Load modules
 try:
     sum_telemetry = load_module('sum_telemetry')
     TelemetrySumTool = sum_telemetry.TelemetrySumTool
@@ -46,7 +48,6 @@ except ImportError as e:
     print(f"Warning: Could not load sum_telemetry: {e}")
     TelemetrySumTool = None
 
-# Load sum_telemetry_generic
 try:
     sum_telemetry_generic = load_module('sum_telemetry_generic')
     GenericTelemetrySumTool = sum_telemetry_generic.GenericTelemetrySumTool
@@ -66,8 +67,6 @@ class TelemetryAnalysisSuite(QMainWindow):
             app_icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "applogo.png")
             if os.path.exists(app_icon_path):
                 self.setWindowIcon(QIcon(app_icon_path))
-            else:
-                print(f"Warning: Logo file not found at {app_icon_path}")
         except Exception as e:
             print(f"Error setting application logo: {str(e)}")
         
@@ -120,145 +119,53 @@ class TelemetryAnalysisSuite(QMainWindow):
         # Create tab widget
         self.tab_widget = QTabWidget()
         
-        # Add tabs
-        self.setup_telemetry_sum_tab()
+        # Add tabs - simplified version with just core tabs
+        self.setup_organizer_tab()
         
-        # Only add the generic telemetry tab if the module was loaded
+        # Only add the telemetry tabs if the modules were loaded
+        if TelemetrySumTool is not None:
+            self.setup_telemetry_sum_tab()
+        
         if GenericTelemetrySumTool is not None:
             self.setup_generic_telemetry_tab()
-        
-        self.setup_organizer_tab()
         
         # Set up the main layout
         layout = QVBoxLayout()
         layout.addWidget(self.tab_widget)
         self.central_widget.setLayout(layout)
-        
-    def setup_telemetry_sum_tab(self):
-        """Set up the Telemetry Sum Tool tab"""
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        
-        # Header label
-        header_label = QLabel("Telemetry Sum Tool")
-        header_label.setFont(QFont("Arial", 14, QFont.Weight.Bold))
-        header_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(header_label)
-        
-        if TelemetrySumTool is None:
-            error_label = QLabel("The Telemetry Sum Tool could not be loaded.\n\n"
-                            "This feature requires the sum_telemetry module, "
-                            "which could not be found or loaded.\n\n"
-                            "If you're running from source, please ensure all Python files are present.\n"
-                            "If you're running a built version, this feature may not be available.")
-            error_label.setWordWrap(True)
-            error_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            layout.addWidget(error_label)
-        else:
-            # Create but don't show the TelemetrySumTool
-            self.sum_tool = TelemetrySumTool()
-            self.sum_tool.hide()  # Hide the main window
-            
-            # Instead of trying to extract widgets (which can lose connections),
-            # we'll embed the entire central widget
-            if hasattr(self.sum_tool, 'centralWidget') and self.sum_tool.centralWidget():
-                # Just add the whole central widget
-                central_widget = self.sum_tool.centralWidget()
-                # Remove it from its parent first
-                central_widget.setParent(None)
-                # Add it to our tab
-                layout.addWidget(central_widget)
-                
-                # Make sure to keep connections to buttons and other UI elements
-                # This preserves all functionality including the Sum button
-                self.sum_tool.setParent(tab)  # Set parent to keep connections alive
-        
-        self.tab_widget.addTab(tab, "Telemetry Sum")
     
-    def setup_generic_telemetry_tab(self):
-        """Set up the Generic Telemetry Tool tab"""
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        
-        if GenericTelemetrySumTool is None:
-            error_label = QLabel("The Generic Telemetry Tool could not be loaded.\n\n"
-                              "This feature requires the sum_telemetry_generic module, "
-                              "which could not be found or loaded.\n\n"
-                              "If you're running from source, please ensure all Python files are present.\n"
-                              "If you're running a built version, this feature may not be available.")
-            error_label.setWordWrap(True)
-            error_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            layout.addWidget(error_label)
-            self.tab_widget.addTab(tab, "Generic Telemetry Tool (Error)")
-            return
-            
-        try:
-            # Header label
-            header_label = QLabel("Generic Telemetry Tool")
-            header_label.setFont(QFont("Arial", 14, QFont.Weight.Bold))
-            header_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            layout.addWidget(header_label)
-            
-            # Create and add the generic telemetry tool - prevent it from showing its own window
-            self.generic_tool = GenericTelemetrySumTool()
-            self.generic_tool.hide()  # Hide the main window
-            
-            # Instead of trying to extract widgets (which can lose connections),
-            # we'll embed the entire central widget
-            if hasattr(self.generic_tool, 'centralWidget') and self.generic_tool.centralWidget():
-                # Just add the whole central widget
-                central_widget = self.generic_tool.centralWidget()
-                # Remove it from its parent first
-                central_widget.setParent(None)
-                # Add it to our tab
-                layout.addWidget(central_widget)
-                
-                # Make sure to keep connections to buttons and other UI elements
-                # This preserves all functionality including action buttons
-                self.generic_tool.setParent(tab)  # Set parent to keep connections alive
-            
-            # Add the tab
-            self.tab_widget.addTab(tab, "Generic Telemetry Tool")
-            
-        except Exception as e:
-            error_label = QLabel(f"Failed to initialize Generic Telemetry Tool:\n\n{str(e)}\n\n"
-                              "This feature will be disabled for this session.")
-            error_label.setWordWrap(True)
-            error_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            layout.addWidget(error_label)
-            self.tab_widget.addTab(tab, "Generic Telemetry Tool (Error)")
-        
-        # NOTE: We already added the tab in the try block above, so we don't need to add it again here
-        # The tab was added with the line: self.tab_widget.addTab(tab, "Generic Telemetry Tool")
-        
     def setup_organizer_tab(self):
         """Set up the Data Organizer tab"""
         tab = QWidget()
+        
+        # Use a vertical layout for the main tab
         layout = QVBoxLayout(tab)
         
         # Header label
-        header_label = QLabel("Data Organizer")
+        header_label = QLabel("Telemetry Data Manager")
         header_label.setFont(QFont("Arial", 14, QFont.Weight.Bold))
         header_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(header_label)
         
-        # Tab widget for organizer features
-        tab_widget = QTabWidget()
-        layout.addWidget(tab_widget)
+        # Create tab widget for the organizer features
+        organizer_tabs = QTabWidget()
+        layout.addWidget(organizer_tabs)
         
-        # Create tabs for organizer features
+        # Add the organize files tab
         organize_tab = QWidget()
-        reports_tab = QWidget()
-        
-        tab_widget.addTab(organize_tab, "Organize Files")
-        tab_widget.addTab(reports_tab, "Generate Reports")
-        
-        # Setup content for each organizer tab
         self.setup_organize_tab(organize_tab)
-        self.setup_reports_tab(reports_tab)
+        organizer_tabs.addTab(organize_tab, "Organize Files")
         
-        # Add to main tabs
-        self.tab_widget.addTab(tab, "Data Organizer")
+        # Add the report generation tab
+        reports_tab = QWidget()
+        self.setup_reports_tab(reports_tab)
+        organizer_tabs.addTab(reports_tab, "Generate Reports")
+        
+        # Add to main tabs - make this the first tab
+        self.tab_widget.insertTab(0, tab, "Data Manager")
+        
+        # Set the Data Manager as the active tab
+        self.tab_widget.setCurrentIndex(0)
     
     def setup_organize_tab(self, tab):
         """Set up the file organization tab"""
@@ -307,6 +214,11 @@ class TelemetryAnalysisSuite(QMainWindow):
         self.month_combo.addItems(months)
         date_layout.addWidget(self.month_combo, 0, 3)
         
+        # Add a note
+        note_label = QLabel("NOTE: If not specified, date will be determined from filenames or contents")
+        note_label.setWordWrap(True)
+        date_layout.addWidget(note_label, 1, 0, 1, 4)
+        
         layout.addWidget(date_group)
         
         # Process button
@@ -332,55 +244,127 @@ class TelemetryAnalysisSuite(QMainWindow):
         year_group = QGroupBox("Select Year for Report")
         year_layout = QHBoxLayout(year_group)
         
-        self.year_combo = QComboBox()
+        self.report_year_combo = QComboBox()
         current_year = datetime.now().year
-        self.year_combo.addItems([str(y) for y in range(current_year - 5, current_year + 1)])
-        self.year_combo.setCurrentText(str(current_year))
+        self.report_year_combo.addItems([str(y) for y in range(current_year - 5, current_year + 1)])
+        self.report_year_combo.setCurrentText(str(current_year))
         year_layout.addWidget(QLabel("Year:"))
-        year_layout.addWidget(self.year_combo)
+        year_layout.addWidget(self.report_year_combo)
         year_layout.addStretch()
         
+        # Check available data button
+        check_btn = QPushButton("Check Available Data")
+        check_btn.clicked.connect(self.check_available_months)
+        year_layout.addWidget(check_btn)
+        
         layout.addWidget(year_group)
+        
+        # Output file selection
+        output_group = QGroupBox("Output File (Optional)")
+        output_layout = QHBoxLayout(output_group)
+        
+        self.output_path_entry = QLineEdit()
+        output_layout.addWidget(self.output_path_entry)
+        
+        browse_output_btn = QPushButton("Browse...")
+        browse_output_btn.clicked.connect(self.browse_output_file)
+        output_layout.addWidget(browse_output_btn)
+        
+        layout.addWidget(output_group)
+        
+        # Available months display
+        months_group = QGroupBox("Available Monthly Data")
+        months_layout = QVBoxLayout(months_group)
+        
+        self.months_display = QTextEdit()
+        self.months_display.setReadOnly(True)
+        months_layout.addWidget(self.months_display)
+        
+        layout.addWidget(months_group)
         
         # Generate button
         generate_btn = QPushButton("Generate Annual Report")
         generate_btn.clicked.connect(self.generate_annual_report)
         layout.addWidget(generate_btn)
+    
+    def setup_telemetry_sum_tab(self):
+        """Set up the Telemetry Sum Tool tab"""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
         
-        # Status text area
-        self.report_status = QTextEdit()
-        self.report_status.setReadOnly(True)
-        layout.addWidget(QLabel("Status:"))
-        layout.addWidget(self.report_status)
+        # Header label
+        header_label = QLabel("Telemetry Sum Tool")
+        header_label.setFont(QFont("Arial", 14, QFont.Weight.Bold))
+        header_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(header_label)
         
-        # Report options
-        options_group = QGroupBox("Report Options")
-        options_layout = QVBoxLayout(options_group)
+        if TelemetrySumTool is None:
+            error_label = QLabel("The Telemetry Sum Tool could not be loaded.")
+            error_label.setWordWrap(True)
+            error_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            layout.addWidget(error_label)
+        else:
+            # Create but don't show the TelemetrySumTool
+            self.sum_tool = TelemetrySumTool()
+            self.sum_tool.hide()  # Hide the main window
+            
+            # Instead of trying to extract widgets, we'll embed the entire central widget
+            if hasattr(self.sum_tool, 'centralWidget') and self.sum_tool.centralWidget():
+                # Remove it from its parent first
+                central_widget = self.sum_tool.centralWidget()
+                central_widget.setParent(None)
+                # Add it to our tab
+                layout.addWidget(central_widget)
+                
+                # Make sure to keep connections to buttons and other UI elements
+                self.sum_tool.setParent(tab)  # Set parent to keep connections alive
         
-        self.include_summary = QCheckBox("Include monthly summary")
-        self.include_summary.setChecked(True)
-        options_layout.addWidget(self.include_summary)
+        self.tab_widget.addTab(tab, "Telemetry Sum")
+    
+    def setup_generic_telemetry_tab(self):
+        """Set up the Generic Telemetry Tool tab"""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
         
-        self.include_charts = QCheckBox("Include charts (if available)")
-        self.include_charts.setChecked(True)
-        options_layout.addWidget(self.include_charts)
-        
-        layout.addWidget(options_group)
-        
-        # Report preview area
-        preview_group = QGroupBox("Report Preview")
-        preview_layout = QVBoxLayout(preview_group)
-        
-        self.preview_text = QTextEdit()
-        self.preview_text.setReadOnly(True)
-        preview_layout.addWidget(self.preview_text)
-        
-        # Save report button
-        save_btn = QPushButton("Save Report")
-        save_btn.clicked.connect(self.save_report)
-        preview_layout.addWidget(save_btn)
-        
-        layout.addWidget(preview_group, 1)
+        if GenericTelemetrySumTool is None:
+            error_label = QLabel("The Generic Telemetry Tool could not be loaded.")
+            error_label.setWordWrap(True)
+            error_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            layout.addWidget(error_label)
+            self.tab_widget.addTab(tab, "Generic Telemetry Tool (Error)")
+            return
+            
+        try:
+            # Header label
+            header_label = QLabel("Generic Telemetry Tool")
+            header_label.setFont(QFont("Arial", 14, QFont.Weight.Bold))
+            header_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            layout.addWidget(header_label)
+            
+            # Create and add the generic telemetry tool - prevent it from showing its own window
+            self.generic_tool = GenericTelemetrySumTool()
+            self.generic_tool.hide()  # Hide the main window
+            
+            # Instead of trying to extract widgets, we'll embed the entire central widget
+            if hasattr(self.generic_tool, 'centralWidget') and self.generic_tool.centralWidget():
+                # Remove it from its parent first
+                central_widget = self.generic_tool.centralWidget()
+                central_widget.setParent(None)
+                # Add it to our tab
+                layout.addWidget(central_widget)
+                
+                # Make sure to keep connections to buttons and other UI elements
+                self.generic_tool.setParent(tab)  # Set parent to keep connections alive
+            
+            # Add the tab
+            self.tab_widget.addTab(tab, "Generic Telemetry Tool")
+            
+        except Exception as e:
+            error_label = QLabel(f"Failed to initialize Generic Telemetry Tool: {str(e)}")
+            error_label.setWordWrap(True)
+            error_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            layout.addWidget(error_label)
+            self.tab_widget.addTab(tab, "Generic Telemetry Tool (Error)")
     
     def browse_data_dir(self):
         """Open a dialog to select the data directory"""
@@ -400,6 +384,18 @@ class TelemetryAnalysisSuite(QMainWindow):
         )
         if folder_path:
             self.input_dir_entry.setText(folder_path)
+    
+    def browse_output_file(self):
+        """Open a dialog to select output file location"""
+        year = self.report_year_combo.currentText()
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Annual Report",
+            os.path.join(self.data_dir, f"Annual_Report_{year}.xlsx"),
+            "Excel Files (*.xlsx);;All Files (*)"
+        )
+        if file_path:
+            self.output_path_entry.setText(file_path)
     
     def organize_files(self):
         """Organize files from the selected folder into the data directory"""
@@ -446,115 +442,115 @@ class TelemetryAnalysisSuite(QMainWindow):
         self.log_text.append("Starting file organization...\n")
         self.status_bar.showMessage("Organizing files...")
         
-        success_count = 0
-        
-        # Process each file
-        for i, file_path in enumerate(file_paths, 1):
-            try:
-                self.status_bar.showMessage(
-                    f"Processing file {i} of {len(file_paths)}: {os.path.basename(file_path)}"
-                )
-                
-                # Process the file
-                target_path = self.organizer.store_monthly_file(
-                    file_path,
-                    year=year if year and year.isdigit() else None,
-                    month=month if month and month.isdigit() else None
-                )
-                
-                self.log_text.append(f"✅ Successfully organized: {os.path.basename(file_path)}")
-                self.log_text.append(f"   → Moved to: {target_path}\n")
-                success_count += 1
-                
-            except Exception as e:
-                error_msg = str(e)
-                self.log_text.append(f"❌ Error processing {os.path.basename(file_path)}: {error_msg}")
-                self.log_text.append(f"   → {str(e)}\n")
+        try:
+            # Process files using the data organizer
+            report = self.organizer.process_new_files(
+                folder_path,
+                year=year if year and year.isdigit() else None,
+                month=month if month and month.isdigit() else None
+            )
             
-            # Process events to update the UI
-            QApplication.processEvents()
+            # Log results
+            self.log_text.append(f"Processed {report['total_files']} files:\n")
+            
+            # Log successful files
+            for item in report['organized']:
+                self.log_text.append(f"✅ {os.path.basename(item['original'])} → {os.path.basename(item['destination'])}")
+                if 'processed' in item:
+                    self.log_text.append(f"   → Also processed: {os.path.basename(item['processed'])}")
+            
+            # Log errors
+            if report['errors']:
+                self.log_text.append("\nErrors:")
+                for error in report['errors']:
+                    self.log_text.append(f"❌ {os.path.basename(error['file'])}: {error['error']}")
+            
+            # Final status
+            success_count = len(report['organized'])
+            error_count = len(report['errors'])
+            
+            status_msg = (
+                f"Completed: {success_count} files organized successfully, "
+                f"{error_count} files had errors."
+            )
+            self.status_bar.showMessage(status_msg)
+            
+            # Show completion dialog
+            QMessageBox.information(
+                self,
+                "File Organization Complete",
+                status_msg
+            )
+            
+        except Exception as e:
+            error_msg = f"An error occurred during organization: {str(e)}"
+            self.log_text.append(f"ERROR: {error_msg}")
+            self.status_bar.showMessage("Error during organization", True)
+            QMessageBox.critical(self, "Error", error_msg)
+    
+    def check_available_months(self):
+        """Check which months have data available for the selected year"""
+        year = self.report_year_combo.currentText()
         
-        # Show completion message
-        status_msg = (
-            f"✅ Successfully organized {success_count} of {len(file_paths)} files. "
-            f"Failed: {len(file_paths) - success_count} files."
-        )
-        self.status_bar.showMessage(status_msg)
-        self.log_text.append("\n" + "="*50)
-        self.log_text.append(status_msg)
-        
-        # Scroll to the bottom of the log
-        self.log_text.verticalScrollBar().setValue(
-            self.log_text.verticalScrollBar().maximum()
-        )
-        
-        # Show completion dialog
-        QMessageBox.information(
-            self,
-            "File Organization Complete",
-            status_msg
-        )
+        try:
+            # Get files organized by month for the selected year
+            year_files = self.organizer.list_files_for_year(year)
+            
+            if not any(year_files.values()):
+                self.months_display.setText(f"No data files found for year {year}")
+                return
+            
+            # Display months and files
+            month_text = ""
+            for month_num in range(1, 13):
+                month_name = calendar.month_name[month_num]
+                files = year_files.get(month_num, [])
+                
+                if files:
+                    file_count = len(files)
+                    month_text += f"✅ {month_name}: {file_count} files\n"
+                else:
+                    month_text += f"❌ {month_name}: No files\n"
+            
+            self.months_display.setText(month_text)
+            self.status_bar.showMessage(f"Checked availability for year {year}")
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"An error occurred: {str(e)}")
     
     def generate_annual_report(self):
         """Generate an annual report for the selected year"""
-        year = self.year_combo.currentText()
-        
-        try:
-            self.report_status.clear()
-            self.report_status.append(f"Generating annual report for {year}...")
-            
-            # Generate the report using the organizer
-            report_path = self.organizer.generate_annual_report(int(year))
-            
-            # Update the preview with the report content
-            try:
-                with open(report_path, 'r') as f:
-                    content = f.read()
-                self.preview_text.setPlainText(content)
-                self.report_status.append("\nReport generated successfully!")
-                self.report_status.append(f"Location: {report_path}")
-                
-                QMessageBox.information(
-                    self, 
-                    "Success", 
-                    f"Annual report for {year} generated successfully!\n\n"
-                    f"Location: {report_path}"
-                )
-                
-            except Exception as e:
-                self.report_status.append(f"\nError reading report: {str(e)}")
-                raise
-                
-        except Exception as e:
-            error_msg = f"Failed to generate annual report:\n{str(e)}"
-            self.report_status.append("\nError: " + str(e))
-            QMessageBox.critical(self, "Error", error_msg)
-    
-    def save_report(self):
-        """Save the generated report to a file"""
-        if not self.preview_text.toPlainText():
-            QMessageBox.warning(self, "No Report", "Please generate a report before saving.")
+        year = self.report_year_combo.currentText()
+        if not year:
+            QMessageBox.critical(self, "Error", "Please select a year")
             return
         
-        file_path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Save Report",
-            f"Telemetry_Report_{self.year_combo.currentText()}.txt",
-            "Text Files (*.txt);;CSV Files (*.csv);;All Files (*)"
-        )
+        output_path = self.output_path_entry.text()
+        if not output_path:
+            # Create default path
+            output_path = os.path.join(self.organizer.base_directory, f"Annual_Report_{year}.xlsx")
+            self.output_path_entry.setText(output_path)
         
-        if file_path:
-            try:
-                with open(file_path, 'w') as f:
-                    f.write(self.preview_text.toPlainText())
-                self.status_bar.showMessage(f"Report saved to {file_path}")
-                QMessageBox.information(
-                    self,
-                    "Success",
-                    f"Report saved successfully to:\n{file_path}"
-                )
-            except Exception as e:
-                QMessageBox.critical(self, "Error", f"Failed to save report: {str(e)}")
+        try:
+            self.status_bar.showMessage(f"Generating annual report for {year}...")
+            
+            # Generate the report
+            combined_data, report_path = self.organizer.generate_annual_report(year, output_path)
+            
+            if combined_data.empty:
+                QMessageBox.information(self, "Result", f"No data found for year {year}")
+                self.status_bar.showMessage(f"No data found for year {year}")
+                return
+            
+            if report_path:
+                QMessageBox.information(self, "Success", f"Annual report saved to:\n{report_path}")
+                self.status_bar.showMessage(f"Report saved to {os.path.basename(report_path)}")
+            else:
+                QMessageBox.critical(self, "Error", "Failed to save report")
+                
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"An error occurred: {str(e)}")
+            self.status_bar.showMessage(f"Error: {str(e)}")
 
 
 def main():
@@ -569,8 +565,6 @@ def main():
         if os.path.exists(app_icon_path):
             app_icon = QIcon(app_icon_path)
             app.setWindowIcon(app_icon)
-        else:
-            print(f"Warning: Logo file not found at {app_icon_path}")
     except Exception as e:
         print(f"Error setting application logo: {str(e)}")
     
