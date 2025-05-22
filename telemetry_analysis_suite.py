@@ -17,18 +17,41 @@ from data_organizer import TelemetryDataOrganizer
 import sys
 import importlib.util
 
+def load_module(module_name):
+    """Helper function to load a module, trying both .py and .py.old extensions"""
+    base_path = module_name
+    
+    # Try .py first, then .py.old
+    for ext in ['', '.old']:
+        try:
+            file_path = f"{base_path}.py{ext}" if ext else f"{base_path}.py"
+            spec = importlib.util.spec_from_file_location(module_name, file_path)
+            if spec is None:
+                continue
+                
+            module = importlib.util.module_from_spec(spec)
+            sys.modules[module_name] = module
+            spec.loader.exec_module(module)
+            return module
+        except FileNotFoundError:
+            continue
+    
+    raise ImportError(f"Could not find {module_name}.py or {module_name}.py.old")
+
 # Load sum_telemetry without executing its __main__ section
-spec = importlib.util.spec_from_file_location('sum_telemetry', 'sum_telemetry.py')
-sum_telemetry = importlib.util.module_from_spec(spec)
-sys.modules['sum_telemetry'] = sum_telemetry
-spec.loader.exec_module(sum_telemetry)
-TelemetrySumTool = sum_telemetry.TelemetrySumTool
+try:
+    sum_telemetry = load_module('sum_telemetry')
+    TelemetrySumTool = sum_telemetry.TelemetrySumTool
+except ImportError as e:
+    print(f"Warning: Could not load sum_telemetry: {e}")
+    TelemetrySumTool = None
 
 # Load sum_telemetry_generic
-spec_gen = importlib.util.spec_from_file_location('sum_telemetry_generic', 'sum_telemetry_generic.py')
-sum_telemetry_generic = importlib.util.module_from_spec(spec_gen)
-sys.modules['sum_telemetry_generic'] = sum_telemetry_generic
-spec_gen.loader.exec_module(sum_telemetry_generic)
+try:
+    sum_telemetry_generic = load_module('sum_telemetry_generic')
+except ImportError as e:
+    print(f"Warning: Could not load sum_telemetry_generic: {e}")
+    sum_telemetry_generic = None
 GenericTelemetrySumTool = sum_telemetry_generic.GenericTelemetrySumTool
 
 class TelemetryAnalysisSuite(QMainWindow):
@@ -46,6 +69,23 @@ class TelemetryAnalysisSuite(QMainWindow):
         # Initialize status bar
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
+        
+        # Check if required modules were loaded
+        self.modules_loaded = {
+            'sum_telemetry': TelemetrySumTool is not None,
+            'sum_telemetry_generic': sum_telemetry_generic is not None
+        }
+        
+        if not all(self.modules_loaded.values()):
+            missing = [name for name, loaded in self.modules_loaded.items() if not loaded]
+            QMessageBox.warning(
+                self,
+                "Warning: Some features disabled",
+                f"Could not load the following modules: {', '.join(missing)}. "
+                "Some features will be disabled.\n\n"
+                "If you're running from a built version, this is expected.\n"
+                "If running from source, please ensure all Python files are present."
+            )
         
         self.setup_ui()
         
