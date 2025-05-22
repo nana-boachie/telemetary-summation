@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QH
                            QCheckBox, QGroupBox, QTextEdit, QScrollArea, QMessageBox,
                            QFileDialog, QGridLayout, QSpinBox, QStatusBar)
 from PyQt6.QtCore import Qt, QSize
-from PyQt6.QtGui import QFont, QAction
+from PyQt6.QtGui import QFont, QAction, QIcon, QPixmap
 import pandas as pd
 from datetime import datetime
 import calendar
@@ -49,16 +49,27 @@ except ImportError as e:
 # Load sum_telemetry_generic
 try:
     sum_telemetry_generic = load_module('sum_telemetry_generic')
-except ImportError as e:
+    GenericTelemetrySumTool = sum_telemetry_generic.GenericTelemetrySumTool
+except (ImportError, AttributeError) as e:
     print(f"Warning: Could not load sum_telemetry_generic: {e}")
     sum_telemetry_generic = None
-GenericTelemetrySumTool = sum_telemetry_generic.GenericTelemetrySumTool
+    GenericTelemetrySumTool = None
 
 class TelemetryAnalysisSuite(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Telemetry Analysis Suite")
         self.resize(1000, 800)
+        
+        # Set application logo
+        try:
+            app_icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "applogo.png")
+            if os.path.exists(app_icon_path):
+                self.setWindowIcon(QIcon(app_icon_path))
+            else:
+                print(f"Warning: Logo file not found at {app_icon_path}")
+        except Exception as e:
+            print(f"Error setting application logo: {str(e)}")
         
         # Initialize the data organizer
         self.organizer = TelemetryDataOrganizer()
@@ -76,6 +87,9 @@ class TelemetryAnalysisSuite(QMainWindow):
             'sum_telemetry_generic': sum_telemetry_generic is not None
         }
         
+        # Initialize UI
+        self.setup_ui()
+        
         if not all(self.modules_loaded.values()):
             missing = [name for name, loaded in self.modules_loaded.items() if not loaded]
             QMessageBox.warning(
@@ -87,35 +101,38 @@ class TelemetryAnalysisSuite(QMainWindow):
                 "If running from source, please ensure all Python files are present."
             )
         
-        self.setup_ui()
+        self.update_status("Ready")
         
     def update_status(self, message, is_error=False):
         """Update the status bar with a message"""
-        self.status_bar.showMessage(message)
-        if is_error:
-            self.status_bar.setStyleSheet("color: red;")
-        else:
-            self.status_bar.setStyleSheet("")
+        if hasattr(self, 'status_bar'):
+            self.status_bar.showMessage(message)
+            if is_error:
+                self.status_bar.setStyleSheet("background-color: #ffdddd; color: #cc0000;")
+            else:
+                self.status_bar.setStyleSheet("")
     
     def setup_ui(self):
-        # Main widget and layout
-        main_widget = QWidget()
-        self.setCentralWidget(main_widget)
-        main_layout = QVBoxLayout(main_widget)
+        # Create main widget and layout
+        self.central_widget = QWidget()
+        self.setCentralWidget(self.central_widget)
         
         # Create tab widget
-        self.tabs = QTabWidget()
-        main_layout.addWidget(self.tabs)
+        self.tab_widget = QTabWidget()
         
-        # Add tools as tabs
+        # Add tabs
         self.setup_telemetry_sum_tab()
-        self.setup_generic_telemetry_tab()
+        
+        # Only add the generic telemetry tab if the module was loaded
+        if GenericTelemetrySumTool is not None:
+            self.setup_generic_telemetry_tab()
+        
         self.setup_organizer_tab()
         
-        # Status bar
-        self.status_bar = QStatusBar()
-        self.setStatusBar(self.status_bar)
-        self.update_status("Ready")
+        # Set up the main layout
+        layout = QVBoxLayout()
+        layout.addWidget(self.tab_widget)
+        self.central_widget.setLayout(layout)
         
     def setup_telemetry_sum_tab(self):
         """Set up the Telemetry Sum Tool tab"""
@@ -128,40 +145,91 @@ class TelemetryAnalysisSuite(QMainWindow):
         header_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(header_label)
         
-        # Add the TelemetrySumTool widget
-        self.sum_tool = TelemetrySumTool()
+        if TelemetrySumTool is None:
+            error_label = QLabel("The Telemetry Sum Tool could not be loaded.\n\n"
+                            "This feature requires the sum_telemetry module, "
+                            "which could not be found or loaded.\n\n"
+                            "If you're running from source, please ensure all Python files are present.\n"
+                            "If you're running a built version, this feature may not be available.")
+            error_label.setWordWrap(True)
+            error_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            layout.addWidget(error_label)
+        else:
+            # Create but don't show the TelemetrySumTool
+            self.sum_tool = TelemetrySumTool()
+            self.sum_tool.hide()  # Hide the main window
+            
+            # Instead of trying to extract widgets (which can lose connections),
+            # we'll embed the entire central widget
+            if hasattr(self.sum_tool, 'centralWidget') and self.sum_tool.centralWidget():
+                # Just add the whole central widget
+                central_widget = self.sum_tool.centralWidget()
+                # Remove it from its parent first
+                central_widget.setParent(None)
+                # Add it to our tab
+                layout.addWidget(central_widget)
+                
+                # Make sure to keep connections to buttons and other UI elements
+                # This preserves all functionality including the Sum button
+                self.sum_tool.setParent(tab)  # Set parent to keep connections alive
         
-        # Remove the main window elements we don't need in the tab
-        self.sum_tool.setParent(None)
-        
-        # Get the central widget's layout and add it to our tab
-        if self.sum_tool.centralWidget():
-            layout.addWidget(self.sum_tool.centralWidget())
-        
-        self.tabs.addTab(tab, "Telemetry Sum")
+        self.tab_widget.addTab(tab, "Telemetry Sum")
     
     def setup_generic_telemetry_tab(self):
         """Set up the Generic Telemetry Tool tab"""
         tab = QWidget()
         layout = QVBoxLayout(tab)
         
-        # Header label
-        header_label = QLabel("Generic Telemetry Tool")
-        header_label.setFont(QFont("Arial", 14, QFont.Weight.Bold))
-        header_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(header_label)
+        if GenericTelemetrySumTool is None:
+            error_label = QLabel("The Generic Telemetry Tool could not be loaded.\n\n"
+                              "This feature requires the sum_telemetry_generic module, "
+                              "which could not be found or loaded.\n\n"
+                              "If you're running from source, please ensure all Python files are present.\n"
+                              "If you're running a built version, this feature may not be available.")
+            error_label.setWordWrap(True)
+            error_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            layout.addWidget(error_label)
+            self.tab_widget.addTab(tab, "Generic Telemetry Tool (Error)")
+            return
+            
+        try:
+            # Header label
+            header_label = QLabel("Generic Telemetry Tool")
+            header_label.setFont(QFont("Arial", 14, QFont.Weight.Bold))
+            header_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            layout.addWidget(header_label)
+            
+            # Create and add the generic telemetry tool - prevent it from showing its own window
+            self.generic_tool = GenericTelemetrySumTool()
+            self.generic_tool.hide()  # Hide the main window
+            
+            # Instead of trying to extract widgets (which can lose connections),
+            # we'll embed the entire central widget
+            if hasattr(self.generic_tool, 'centralWidget') and self.generic_tool.centralWidget():
+                # Just add the whole central widget
+                central_widget = self.generic_tool.centralWidget()
+                # Remove it from its parent first
+                central_widget.setParent(None)
+                # Add it to our tab
+                layout.addWidget(central_widget)
+                
+                # Make sure to keep connections to buttons and other UI elements
+                # This preserves all functionality including action buttons
+                self.generic_tool.setParent(tab)  # Set parent to keep connections alive
+            
+            # Add the tab
+            self.tab_widget.addTab(tab, "Generic Telemetry Tool")
+            
+        except Exception as e:
+            error_label = QLabel(f"Failed to initialize Generic Telemetry Tool:\n\n{str(e)}\n\n"
+                              "This feature will be disabled for this session.")
+            error_label.setWordWrap(True)
+            error_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            layout.addWidget(error_label)
+            self.tab_widget.addTab(tab, "Generic Telemetry Tool (Error)")
         
-        # Add the GenericTelemetrySumTool widget
-        self.generic_tool = GenericTelemetrySumTool()
-        
-        # Remove the main window elements we don't need in the tab
-        self.generic_tool.setParent(None)
-        
-        # Get the central widget's layout and add it to our tab
-        if self.generic_tool.centralWidget():
-            layout.addWidget(self.generic_tool.centralWidget())
-        
-        self.tabs.addTab(tab, "Generic Telemetry")
+        # NOTE: We already added the tab in the try block above, so we don't need to add it again here
+        # The tab was added with the line: self.tab_widget.addTab(tab, "Generic Telemetry Tool")
         
     def setup_organizer_tab(self):
         """Set up the Data Organizer tab"""
@@ -190,7 +258,7 @@ class TelemetryAnalysisSuite(QMainWindow):
         self.setup_reports_tab(reports_tab)
         
         # Add to main tabs
-        self.tabs.addTab(tab, "Data Organizer")
+        self.tab_widget.addTab(tab, "Data Organizer")
     
     def setup_organize_tab(self, tab):
         """Set up the file organization tab"""
@@ -494,6 +562,17 @@ def main():
     
     # Set application style
     app.setStyle('Fusion')
+    
+    # Set application icon for all windows
+    try:
+        app_icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "applogo.png")
+        if os.path.exists(app_icon_path):
+            app_icon = QIcon(app_icon_path)
+            app.setWindowIcon(app_icon)
+        else:
+            print(f"Warning: Logo file not found at {app_icon_path}")
+    except Exception as e:
+        print(f"Error setting application logo: {str(e)}")
     
     window = TelemetryAnalysisSuite()
     window.show()

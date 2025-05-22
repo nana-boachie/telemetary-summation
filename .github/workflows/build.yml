@@ -37,7 +37,7 @@ jobs:
     
     - name: Build Telemetry Analysis Suite with PyInstaller
       run: |
-        pyinstaller --name="Telemetry Analysis Suite" --windowed --onedir --add-data="requirements.txt;." --add-data="data_organizer.py;." telemetry_analysis_suite.py
+        pyinstaller --name="Telemetry Analysis Suite" --windowed --onedir --add-data="requirements.txt;." --add-data="data_organizer.py;." --add-data="assets;assets" telemetry_analysis_suite.py
     
     - name: Create ZIP archive
       run: |
@@ -69,7 +69,7 @@ jobs:
     
     - name: Build Telemetry Analysis Suite with PyInstaller (macOS)
       run: |
-        pyinstaller --name="Telemetry Analysis Suite" --windowed --noconfirm --onefile --add-data="requirements.txt:." --add-data="data_organizer.py:." telemetry_analysis_suite.py
+        pyinstaller --name="Telemetry Analysis Suite" --windowed --noconfirm --onefile --add-data="requirements.txt:." --add-data="data_organizer.py:." --add-data="assets:assets" telemetry_analysis_suite.py
     
     - name: Create ZIP archive (macOS)
       run: |
