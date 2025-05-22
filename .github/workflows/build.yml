@@ -1,4 +1,4 @@
-name: Build Applications
+name: Build Telemetry Analysis Suite
 
 on:
   push:
@@ -14,6 +14,16 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
+    - name: Rename old Python files to .old
+      run: |
+        Get-ChildItem -Path . -Filter *.py -Exclude telemetry_analysis_suite.py | 
+        Where-Object { $_.Name -ne "telemetry_analysis_suite.py" } | 
+        ForEach-Object { 
+            $newName = $_.FullName + ".old"
+            if (Test-Path $newName) { Remove-Item $newName -Force }
+            Rename-Item -Path $_.FullName -NewName $newName 
+        }
+    
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
@@ -25,31 +35,20 @@ jobs:
         pip install -r requirements.txt
         pip install pyinstaller
     
-    - name: Build Telemetry Tool with PyInstaller
+    - name: Build Telemetry Analysis Suite with PyInstaller
       run: |
-        pyinstaller --name="Telemetry Summation Tool" --windowed --onedir --add-data="requirements.txt;." sum_telemetry_generic.py
+        pyinstaller --name="Telemetry Analysis Suite" --windowed --onedir --add-data="requirements.txt;." --add-data="data_organizer.py;." telemetry_analysis_suite.py
     
-    - name: Build Annual Report Generator with PyInstaller
+    - name: Create ZIP archive
       run: |
-        pyinstaller --name="Annual Report Generator" --windowed --onedir --add-data="requirements.txt;." --add-data="data_organizer.py;." annual_report_generator.py
+        mkdir -p dist/windows
+        Compress-Archive -Path "dist\Telemetry Analysis Suite" -DestinationPath "dist\windows\Telemetry_Analysis_Suite_Windows.zip"
     
-    - name: Create ZIP archives
-      run: |
-        Compress-Archive -Path "dist\Telemetry Summation Tool" -DestinationPath "dist\Telemetry_Summation_Tool_Windows.zip"
-        Compress-Archive -Path "dist\Annual Report Generator" -DestinationPath "dist\Annual_Report_Generator_Windows.zip"
-    
-    - name: Upload Windows Telemetry Tool artifact
+    - name: Upload Windows Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: telemetry-summation-windows
-        path: dist\Telemetry_Summation_Tool_Windows.zip
-        retention-days: 7
-        
-    - name: Upload Windows Annual Report Generator artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: annual-report-generator-windows
-        path: dist\Annual_Report_Generator_Windows.zip
+        name: telemetry-analysis-suite-windows
+        path: dist/windows/Telemetry_Analysis_Suite_Windows.zip
         retention-days: 7
 
   build-macos:
@@ -68,79 +67,41 @@ jobs:
         pip install -r requirements.txt
         pip install pyinstaller
     
-    - name: Build Telemetry Tool with PyInstaller
+    - name: Build Telemetry Analysis Suite with PyInstaller (macOS)
       run: |
-        pyinstaller --name="Telemetry Summation Tool" --windowed --onedir --add-data="requirements.txt:." sum_telemetry_generic.py
+        pyinstaller --name="Telemetry Analysis Suite" --windowed --noconfirm --onefile --add-data="requirements.txt:." --add-data="data_organizer.py:." telemetry_analysis_suite.py
     
-    - name: Build Annual Report Generator with PyInstaller
+    - name: Create ZIP archive (macOS)
       run: |
-        pyinstaller --name="Annual Report Generator" --windowed --onedir --add-data="requirements.txt:." --add-data="data_organizer.py:." annual_report_generator.py
-    
-    - name: Create and upload macOS artifacts
-      run: |
-        # Ensure we're in the root directory
-        cd "$GITHUB_WORKSPACE"
-        
-        # Create dist directory if it doesn't exist
-        mkdir -p dist
-        
-        # Create ZIP files with full paths
+        mkdir -p dist/macos
         cd dist
-        zip -r "$GITHUB_WORKSPACE/Telemetry_Summation_Tool_macOS.zip" "Telemetry Summation Tool.app"
-        zip -r "$GITHUB_WORKSPACE/Annual_Report_Generator_macOS.zip" "Annual Report Generator.app"
-        cd "$GITHUB_WORKSPACE"
-        
-        # List files for debugging
-        echo "Files in workspace:"
-        ls -la
-        echo "Files in dist directory:"
-        ls -la dist/
-        
-    - name: Upload macOS Telemetry Tool artifact
+        zip -r "Telemetry_Analysis_Suite_macOS.zip" "Telemetry Analysis Suite.app"
+        mkdir -p dist/macos
+        mv "Telemetry_Analysis_Suite_macOS.zip" "dist/macos/"
+    
+    - name: Upload macOS Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: telemetry-summation-macos
-        path: Telemetry_Summation_Tool_macOS.zip
-        retention-days: 7
-        
-    - name: Upload macOS Annual Report Generator artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: annual-report-generator-macos
-        path: Annual_Report_Generator_macOS.zip
+        name: telemetry-analysis-suite-macos
+        path: dist/macos/Telemetry_Analysis_Suite_macOS.zip
         retention-days: 7
 
   create-release:
     needs: [build-windows, build-macos]
     runs-on: ubuntu-latest
-    # Only create releases when pushing to the main branch, not on PRs
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    permissions:
-      contents: write
     steps:
-      - name: Download Windows Telemetry Tool artifact
+      - name: Download Windows artifact
         uses: actions/download-artifact@v4
         with:
-          name: telemetry-summation-windows
-          path: windows/telemetry-tool
-          
-      - name: Download Windows Annual Report Generator artifact
+          name: telemetry-analysis-suite-windows
+          path: windows
+      
+      - name: Download macOS artifact
         uses: actions/download-artifact@v4
         with:
-          name: annual-report-generator-windows
-          path: windows/annual-report
-          
-      - name: Download macOS Telemetry Tool artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: telemetry-summation-macos
-          path: macos/telemetry-tool
-          
-      - name: Download macOS Annual Report Generator artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: annual-report-generator-macos
-          path: macos/annual-report
+          name: telemetry-analysis-suite-macos
+          path: macos
       
       - name: Get current date
         id: date
@@ -155,7 +116,5 @@ jobs:
           draft: false
           prerelease: false
           files: |
-            windows/telemetry-tool/Telemetry_Summation_Tool_Windows.zip
-            windows/annual-report/Annual_Report_Generator_Windows.zip
-            macos/telemetry-tool/Telemetry_Summation_Tool_macOS.zip
-            macos/annual-report/Annual_Report_Generator_macOS.zip
+            windows/Telemetry_Analysis_Suite_Windows.zip
+            macos/Telemetry_Analysis_Suite_macOS.zip

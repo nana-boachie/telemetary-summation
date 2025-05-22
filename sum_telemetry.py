@@ -143,8 +143,52 @@ class TelemetrySumTool(QMainWindow):
     
     def analyze_excel_file(self, file_path, prefix_length=6):
         """Analyze the Excel file and return information about sheet grouping without processing"""
-        # Load the Excel file
-        xl = pd.ExcelFile(file_path)
+        # Determine file extension
+        file_ext = os.path.splitext(file_path)[1].lower()
+        
+        # Try to detect file type by content if extension is not reliable
+        if not file_ext or file_ext not in ['.xlsx', '.xls']:
+            with open(file_path, 'rb') as f:
+                header = f.read(8)  # Read first 8 bytes to detect file type
+                if header.startswith(b'\x50\x4B\x03\x04'):  # PK header (ZIP)
+                    file_ext = '.xlsx'
+                elif header.startswith(b'\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1'):  # OLE header
+                    file_ext = '.xls'
+        
+        # Try with appropriate engine based on detected file type
+        if file_ext == '.xlsx':
+            try:
+                xl = pd.ExcelFile(file_path, engine='openpyxl')
+            except Exception as e:
+                try:
+                    xl = pd.ExcelFile(file_path, engine='xlsxwriter')
+                except Exception as e2:
+                    try:
+                        xl = pd.ExcelFile(file_path)  # Let pandas decide
+                    except Exception as e3:
+                        raise ValueError(f"Could not read Excel file. Error: {str(e3)}")
+        elif file_ext == '.xls':
+            try:
+                xl = pd.ExcelFile(file_path, engine='xlrd')
+            except Exception as e:
+                try:
+                    xl = pd.ExcelFile(file_path)  # Let pandas decide
+                except Exception as e2:
+                    raise ValueError(f"Could not read .xls file. Error: {str(e2)}")
+        else:
+            # For unknown extensions, try all engines
+            for engine in ['openpyxl', 'xlsxwriter', 'xlrd']:
+                try:
+                    xl = pd.ExcelFile(file_path, engine=engine)
+                    break
+                except Exception as e:
+                    continue
+            else:
+                # If all engines fail, try without specifying an engine
+                try:
+                    xl = pd.ExcelFile(file_path)
+                except Exception as e:
+                    raise ValueError(f"Could not determine Excel file format. Error: {str(e)}")
         
         # Group sheet names by first N characters (default=6)
         sheet_groups = defaultdict(list)
@@ -160,13 +204,38 @@ class TelemetrySumTool(QMainWindow):
         sheet_analysis = {}
         for sheet_name in xl.sheet_names:
             try:
-                df = pd.read_excel(file_path, sheet_name=sheet_name, nrows=5)  # Read just a few rows for analysis
+                # Try with appropriate engine based on file extension
+                if file_ext == '.xlsx':
+                    try:
+                        df = pd.read_excel(file_path, sheet_name=sheet_name, nrows=5, engine='openpyxl')
+                    except Exception as e:
+                        try:
+                            df = pd.read_excel(file_path, sheet_name=sheet_name, nrows=5, engine='xlsxwriter')
+                        except Exception as e2:
+                            df = pd.read_excel(file_path, sheet_name=sheet_name, nrows=5)
+                elif file_ext == '.xls':
+                    try:
+                        df = pd.read_excel(file_path, sheet_name=sheet_name, nrows=5, engine='xlrd')
+                    except Exception as e:
+                        df = pd.read_excel(file_path, sheet_name=sheet_name, nrows=5)
+                else:
+                    # For unknown extensions, try all engines
+                    for engine in ['openpyxl', 'xlrd', 'xlsxwriter']:
+                        try:
+                            df = pd.read_excel(file_path, sheet_name=sheet_name, nrows=5, engine=engine)
+                            break
+                        except Exception as e:
+                            continue
+                    else:
+                        # If all engines fail, try without specifying an engine
+                        df = pd.read_excel(file_path, sheet_name=sheet_name, nrows=5)
+                
                 has_raw = 'Raw' in df.columns
                 
                 # Check for timestamp column
                 timestamp_col = None
                 for col in df.columns:
-                    if 'time' in col.lower() or 'date' in col.lower():
+                    if 'time' in str(col).lower() or 'date' in str(col).lower():
                         timestamp_col = col
                         break
                 
@@ -193,8 +262,52 @@ class TelemetrySumTool(QMainWindow):
     
     def process_excel_file(self, file_path, output_path, prefix_length=6):
         """Process Excel file and create output file with summed telemetry data"""
-        # Load the Excel file
-        xl = pd.ExcelFile(file_path)
+        # Determine file extension
+        file_ext = os.path.splitext(file_path)[1].lower()
+        
+        # Try to detect file type by content if extension is not reliable
+        if not file_ext or file_ext not in ['.xlsx', '.xls']:
+            with open(file_path, 'rb') as f:
+                header = f.read(8)  # Read first 8 bytes to detect file type
+                if header.startswith(b'\x50\x4B\x03\x04'):  # PK header (ZIP)
+                    file_ext = '.xlsx'
+                elif header.startswith(b'\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1'):  # OLE header
+                    file_ext = '.xls'
+        
+        # Try with appropriate engine based on detected file type
+        if file_ext == '.xlsx':
+            try:
+                xl = pd.ExcelFile(file_path, engine='openpyxl')
+            except Exception as e:
+                try:
+                    xl = pd.ExcelFile(file_path, engine='xlsxwriter')
+                except Exception as e2:
+                    try:
+                        xl = pd.ExcelFile(file_path)  # Let pandas decide
+                    except Exception as e3:
+                        raise ValueError(f"Could not read Excel file. Error: {str(e3)}")
+        elif file_ext == '.xls':
+            try:
+                xl = pd.ExcelFile(file_path, engine='xlrd')
+            except Exception as e:
+                try:
+                    xl = pd.ExcelFile(file_path)  # Let pandas decide
+                except Exception as e2:
+                    raise ValueError(f"Could not read .xls file. Error: {str(e2)}")
+        else:
+            # For unknown extensions, try all engines
+            for engine in ['openpyxl', 'xlsxwriter', 'xlrd']:
+                try:
+                    xl = pd.ExcelFile(file_path, engine=engine)
+                    break
+                except Exception as e:
+                    continue
+            else:
+                # If all engines fail, try without specifying an engine
+                try:
+                    xl = pd.ExcelFile(file_path)
+                except Exception as e:
+                    raise ValueError(f"Could not determine Excel file format. Error: {str(e)}")
         
         # Group sheet names by first N characters (default=6)
         sheet_groups = defaultdict(list)
@@ -216,8 +329,31 @@ class TelemetrySumTool(QMainWindow):
                 
                 for sheet in sheets:
                     try:
-                        # Read data from the sheet
-                        df = pd.read_excel(file_path, sheet_name=sheet)
+                        # Read data from the sheet with appropriate engine
+                        if file_ext == '.xlsx':
+                            try:
+                                df = pd.read_excel(file_path, sheet_name=sheet, engine='openpyxl')
+                            except Exception as e:
+                                try:
+                                    df = pd.read_excel(file_path, sheet_name=sheet, engine='xlsxwriter')
+                                except Exception as e2:
+                                    df = pd.read_excel(file_path, sheet_name=sheet)
+                        elif file_ext == '.xls':
+                            try:
+                                df = pd.read_excel(file_path, sheet_name=sheet, engine='xlrd')
+                            except Exception as e:
+                                df = pd.read_excel(file_path, sheet_name=sheet)
+                        else:
+                            # For unknown extensions, try all engines
+                            for engine in ['openpyxl', 'xlrd', 'xlsxwriter']:
+                                try:
+                                    df = pd.read_excel(file_path, sheet_name=sheet, engine=engine)
+                                    break
+                                except Exception as e:
+                                    continue
+                            else:
+                                # If all engines fail, try without specifying an engine
+                                df = pd.read_excel(file_path, sheet_name=sheet)
                         
                         # Check if 'Raw' column exists
                         if 'Raw' in df.columns:
@@ -249,10 +385,28 @@ class TelemetrySumTool(QMainWindow):
                     results[prefix] = combined_data
         
         # Now write each group to a separate sheet in the output Excel file
-        with pd.ExcelWriter(output_path) as writer:
-            for prefix, data in results.items():
-                # Write to Excel
-                data.to_excel(writer, sheet_name=prefix, index=False)
+        try:
+            # Try with openpyxl first (for .xlsx files)
+            with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
+                # Write each group's data to a separate sheet
+                for prefix, data in results.items():
+                    if not data.empty:
+                        data.to_excel(writer, sheet_name=prefix[:31], index=False)  # Sheet name max 31 chars
+        except Exception as e:
+            # Fallback to xlsxwriter if openpyxl fails
+            try:
+                with pd.ExcelWriter(output_path, engine='xlsxwriter') as writer:
+                    # Write each group's data to a separate sheet
+                    for prefix, data in results.items():
+                        if not data.empty:
+                            data.to_excel(writer, sheet_name=prefix[:31], index=False)  # Sheet name max 31 chars
+            except Exception as e2:
+                # Final fallback to default engine
+                with pd.ExcelWriter(output_path) as writer:
+                    # Write each group's data to a separate sheet
+                    for prefix, data in results.items():
+                        if not data.empty:
+                            data.to_excel(writer, sheet_name=prefix[:31], index=False)  # Sheet name max 31 chars
         
         return {
             'processed_groups': len(results),
@@ -269,9 +423,21 @@ class TelemetrySumTool(QMainWindow):
             QMessageBox.critical(self, "Error", "Please select an input file first")
             return
         
-        if not input_file.lower().endswith(('.xls', '.xlsx')):
-            self.update_status(f"Not a valid Excel file: {input_file}", True)
-            QMessageBox.critical(self, "Error", f"Not a valid Excel file: {input_file}")
+        if not os.path.exists(input_file):
+            self.update_status(f"File not found: {input_file}", True)
+            QMessageBox.critical(self, "Error", f"File not found: {input_file}")
+            return
+            
+        try:
+            # Try to read the file to check if it's a valid Excel file
+            with open(input_file, 'rb') as f:
+                header = f.read(8)
+                if not (header.startswith(b'\x50\x4B\x03\x04') or  # ZIP (XLSX)
+                       header.startswith(b'\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1')):  # OLE (XLS)
+                    raise ValueError("Not a valid Excel file (invalid file signature)")
+        except Exception as e:
+            self.update_status(f"Error reading file: {str(e)}", True)
+            QMessageBox.critical(self, "Error", f"Could not read file: {str(e)}")
             return
         
         self.update_status(f"Analyzing file: {os.path.basename(input_file)}...")
@@ -353,10 +519,22 @@ class TelemetrySumTool(QMainWindow):
             self.update_status("No input file selected", True)
             QMessageBox.critical(self, "Error", "Please select an input file first")
             return
-        
-        if not input_file.lower().endswith(('.xls', '.xlsx')):
-            self.update_status(f"Not a valid Excel file: {input_file}", True)
-            QMessageBox.critical(self, "Error", f"Not a valid Excel file: {input_file}")
+            
+        if not os.path.exists(input_file):
+            self.update_status(f"File not found: {input_file}", True)
+            QMessageBox.critical(self, "Error", f"File not found: {input_file}")
+            return
+            
+        try:
+            # Try to read the file to check if it's a valid Excel file
+            with open(input_file, 'rb') as f:
+                header = f.read(8)
+                if not (header.startswith(b'\x50\x4B\x03\x04') or  # ZIP (XLSX)
+                       header.startswith(b'\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1')):  # OLE (XLS)
+                    raise ValueError("Not a valid Excel file (invalid file signature)")
+        except Exception as e:
+            self.update_status(f"Error reading file: {str(e)}", True)
+            QMessageBox.critical(self, "Error", f"Could not read file: {str(e)}")
             return
         
         # Generate output path

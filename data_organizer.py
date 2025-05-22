@@ -136,37 +136,81 @@ class TelemetryDataOrganizer:
         result = {'year': None, 'month': None}
         file_name = os.path.basename(file_path)
         
-        # Try to get date from filename first
-        # Common formats might be YYYY_MM, YYYY-MM, etc.
-        import re
+        # Define month names and abbreviations
+        month_names = list(calendar.month_name[1:])  # Full month names
+        month_abbrs = list(calendar.month_abbr[1:])  # Month abbreviations
         
-        # Pattern for YYYY_MM or YYYY-MM or other common separators
+        # Try to get date from filename first
         patterns = [
-            r'(\d{4})[_\-\.](\d{1,2})',  # YYYY_MM, YYYY-MM, YYYY.MM
-            r'(\d{1,2})[_\-\.](\d{4})',  # MM_YYYY, MM-YYYY, MM.YYYY
+            # YYYY-MM-DD or YYYY_MM_DD or YYYY.MM.DD
+            r'(\d{4})[-_.](\d{1,2})[-_.](\d{1,2})',
+            # DD-MM-YYYY or DD_MM_YYYY or DD.MM.YYYY
+            r'(\d{1,2})[-_.](\d{1,2})[-_.](\d{4})',
+            # YYYYMMDD
+            r'(\d{4})(\d{2})(\d{2})',
+            # MonthName-YYYY or MonthName_YYYY or MonthName.YYYY
+            r'(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[-_.](\d{4})',
+            # YYYY-MonthName or YYYY_MonthName or YYYY.MonthName
+            r'(\d{4})[-_.](Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*',
+            # YYYY-MM or YYYY_MM or YYYY.MM
+            r'(\d{4})[-_.](\d{1,2})(?![\d.])',
+            # MM-YYYY or MM_YYYY or MM.YYYY
+            r'(\d{1,2})[-_.](\d{4})',
+            # YYYYMM (no separator)
+            r'(\d{4})(\d{2})(?![\d.])',
+            # YYYY_MM or YYYY-MM or YYYY.MM (original patterns)
+            r'(\d{4})[_\-\.](\d{1,2})',
+            r'(\d{1,2})[_\-\.](\d{4})',
         ]
         
         for pattern in patterns:
-            match = re.search(pattern, file_name)
+            match = re.search(pattern, file_name, re.IGNORECASE)
             if match:
-                groups = match.groups()
                 try:
-                    if len(groups[0]) == 4:  # YYYY_MM format
-                        result['year'] = groups[0]
-                        result['month'] = int(groups[1])
-                    else:  # MM_YYYY format
-                        result['year'] = groups[1]
-                        result['month'] = int(groups[0])
-                    # Validate month is between 1-12
-                    if result['month'] < 1 or result['month'] > 12:
-                        # Reset and continue to next pattern
-                        result['year'] = None
-                        result['month'] = None
-                        continue
-                    break
-                except ValueError:
-                    # If conversion to int fails, continue to next pattern
+                    groups = match.groups()
+                    
+                    # Handle month names (Jan, January, etc.)
+                    if any(m.lower() in pattern.lower() for m in month_names + month_abbrs):
+                        if len(groups) == 2:  # Format: Month-YYYY or YYYY-Month
+                            if groups[0].isdigit() and len(groups[0]) == 4:  # YYYY-Month
+                                result['year'] = int(groups[0])
+                                month_str = groups[1].lower()
+                            else:  # Month-YYYY
+                                result['year'] = int(groups[1])
+                                month_str = groups[0].lower()
+                            
+                            # Find matching month
+                            for i, (full, abbr) in enumerate(zip(month_names, month_abbrs), 1):
+                                if (month_str.startswith(full.lower()) or 
+                                    month_str.startswith(abbr.lower())):
+                                    result['month'] = i
+                                    break
+                    
+                    # Handle numeric dates
+                    else:
+                        # Handle YYYY-MM-DD or YYYYMMDD
+                        if len(groups[0]) == 4:  # Starts with year
+                            result['year'] = int(groups[0])
+                            result['month'] = int(groups[1])
+                        # Handle DD-MM-YYYY
+                        elif len(groups[-1]) == 4:  # Ends with year
+                            result['year'] = int(groups[-1])
+                            result['month'] = int(groups[1] if len(groups) > 2 else groups[0])
+                        # Handle MM-YYYY
+                        elif len(groups[0]) <= 2 and len(groups[1]) == 4:  # MM-YYYY
+                            result['month'] = int(groups[0])
+                            result['year'] = int(groups[1])
+                    
+                    # Validate the extracted date
+                    if (result['year'] and 2000 <= result['year'] <= 2100 and
+                        result['month'] and 1 <= result['month'] <= 12):
+                        return result
+                    
+                except (ValueError, IndexError, AttributeError):
                     continue
+                finally:
+                    # Reset for next iteration
+                    result = {'year': None, 'month': None}
         
         # If we couldn't determine from filename, try to read the file if it's Excel
         if (result['year'] is None or result['month'] is None) and file_path.endswith(('.xlsx', '.xls')):
