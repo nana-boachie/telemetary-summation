@@ -1,17 +1,17 @@
-import os
-import shutil
-import pandas as pd
-from datetime import datetime
-import calendar
-import glob
-import re
+"""
+Telemetry Data Organizer
 
-# Import this at the module level to avoid potential issues when called from methods
-try:
-    from sum_telemetry import process_excel_file
-except ImportError:
-    # Provide fallback or warning
-    process_excel_file = None
+A module for organizing telemetry data files by year and month,
+and generating annual reports by combining monthly data.
+"""
+import os
+import sys
+import re
+import glob
+import shutil
+import calendar
+from datetime import datetime
+import pandas as pd
 
 class TelemetryDataOrganizer:
     """
@@ -158,9 +158,6 @@ class TelemetryDataOrganizer:
             r'(\d{1,2})[-_.](\d{4})',
             # YYYYMM (no separator)
             r'(\d{4})(\d{2})(?![\d.])',
-            # YYYY_MM or YYYY-MM or YYYY.MM (original patterns)
-            r'(\d{4})[_\-\.](\d{1,2})',
-            r'(\d{1,2})[_\-\.](\d{4})',
         ]
         
         for pattern in patterns:
@@ -233,7 +230,7 @@ class TelemetryDataOrganizer:
                                     except:
                                         continue
                                 
-                                result['year'] = str(first_date.year)
+                                result['year'] = first_date.year
                                 result['month'] = first_date.month
                                 break
             except Exception as e:
@@ -320,35 +317,42 @@ class TelemetryDataOrganizer:
         
         # Default processing function if none provided
         if process_func is None:
-            from sum_telemetry import process_excel_file
-            
-            def default_process(file_path):
-                if process_excel_file is None:
-                    raise ImportError("Cannot process files: sum_telemetry module not available")
+            try:
+                from sum_telemetry import process_excel_file
                 
-                # Create a temporary output path
-                temp_output = os.path.join(os.path.dirname(file_path), f"temp_{os.path.basename(file_path)}")
-                
-                try:
-                    # Process the file
-                    results = process_excel_file(file_path, temp_output)
+                def default_process(file_path):
+                    # Create a temporary output path
+                    temp_output = os.path.join(os.path.dirname(file_path), f"temp_{os.path.basename(file_path)}")
                     
-                    # Load the processed data if file exists
-                    if os.path.exists(temp_output):
-                        result_data = pd.read_excel(temp_output)
-                        return result_data
-                    return None
-                except Exception as e:
-                    raise Exception(f"Error processing file {file_path}: {str(e)}")
-                finally:
-                    # Clean up temporary file regardless of success or failure
-                    if os.path.exists(temp_output):
-                        try:
-                            os.remove(temp_output)
-                        except Exception as cleanup_error:
-                            print(f"Warning: Could not remove temporary file {temp_output}: {cleanup_error}")
-            
-            process_func = default_process
+                    try:
+                        # Process the file
+                        process_excel_file(file_path, temp_output)
+                        
+                        # Load the processed data if file exists
+                        if os.path.exists(temp_output):
+                            result_data = pd.read_excel(temp_output)
+                            return result_data
+                        return None
+                    except Exception as e:
+                        raise Exception(f"Error processing file {file_path}: {str(e)}")
+                    finally:
+                        # Clean up temporary file regardless of success or failure
+                        if os.path.exists(temp_output):
+                            try:
+                                os.remove(temp_output)
+                            except Exception as cleanup_error:
+                                print(f"Warning: Could not remove temporary file {temp_output}: {cleanup_error}")
+                
+                process_func = default_process
+            except ImportError:
+                # If we can't import process_excel_file, use a simple function to just read the Excel file
+                def simple_process(file_path):
+                    try:
+                        return pd.read_excel(file_path)
+                    except Exception as e:
+                        print(f"Error reading file {file_path}: {e}")
+                        return None
+                process_func = simple_process
         
         # Combine data from all months
         all_data = []
@@ -450,15 +454,15 @@ class TelemetryDataOrganizer:
                 
                 # Process the file immediately if requested
                 if process_immediately:
-                    from sum_telemetry import process_excel_file
-                    
-                    # Generate output path
-                    output_dir = os.path.dirname(destination)
-                    file_name = os.path.basename(destination)
-                    output_path = os.path.join(output_dir, f"processed_{file_name}")
-                    
-                    # Process the file
                     try:
+                        from sum_telemetry import process_excel_file
+                        
+                        # Generate output path
+                        output_dir = os.path.dirname(destination)
+                        file_name = os.path.basename(destination)
+                        output_path = os.path.join(output_dir, f"processed_{file_name}")
+                        
+                        # Process the file
                         process_excel_file(destination, output_path)
                         report['organized'][-1]['processed'] = output_path
                     except Exception as e:

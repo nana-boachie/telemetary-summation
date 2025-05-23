@@ -1,5 +1,11 @@
 import os
 import sys
+
+# Add the current directory to the Python path to ensure modules can be found
+current_dir = os.path.dirname(os.path.abspath(__file__))
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
+
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
                              QLabel, QLineEdit, QPushButton, QTabWidget, QFrame, QComboBox,
                              QCheckBox, QGroupBox, QTextEdit, QScrollArea, QMessageBox,
@@ -313,8 +319,52 @@ class AnnualReportGeneratorApp(QMainWindow):
         try:
             self.statusBar().showMessage(f"Generating annual report for {year}...")
             
-            # Generate the report
-            combined_data, report_path = self.organizer.generate_annual_report(year, output_path)
+            # Define a custom process function to ensure all models are included
+            def enhanced_process_func(file_path):
+                try:
+                    # Import the necessary module for processing
+                    from sum_telemetry import process_excel_file
+                    
+                    # Create a temporary output path
+                    temp_output = os.path.join(os.path.dirname(file_path), f"temp_{os.path.basename(file_path)}")
+                    
+                    try:
+                        # Process the file
+                        process_excel_file(file_path, temp_output)
+                        
+                        # Load the processed data if file exists
+                        if os.path.exists(temp_output):
+                            # Read all sheets to capture all models
+                            result_data = pd.read_excel(temp_output, sheet_name=None)
+                            
+                            # Combine all sheets into one DataFrame
+                            all_sheets_data = []
+                            for sheet_name, sheet_data in result_data.items():
+                                # Add sheet name as Model column if not already present
+                                if 'Model' not in sheet_data.columns:
+                                    sheet_data['Model'] = sheet_name
+                                all_sheets_data.append(sheet_data)
+                            
+                            if all_sheets_data:
+                                combined_data = pd.concat(all_sheets_data, ignore_index=True)
+                                return combined_data
+                            return None
+                        return None
+                    except Exception as e:
+                        raise Exception(f"Error processing file {file_path}: {str(e)}")
+                    finally:
+                        # Clean up temporary file regardless of success or failure
+                        if os.path.exists(temp_output):
+                            try:
+                                os.remove(temp_output)
+                            except Exception as cleanup_error:
+                                print(f"Warning: Could not remove temporary file {temp_output}: {cleanup_error}")
+                except Exception as e:
+                    print(f"Error in enhanced_process_func: {str(e)}")
+                    return None
+            
+            # Generate the report with our enhanced processing function
+            combined_data, report_path = self.organizer.generate_annual_report(year, output_path, enhanced_process_func)
             
             if combined_data.empty:
                 QMessageBox.information(self, "Result", f"No data found for year {year}")
